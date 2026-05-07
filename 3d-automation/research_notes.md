@@ -12,3 +12,7 @@ https://help.prusa3d.com/article/sending-g-codes-to-printer-via-network-prusa-co
 5. for g-code understanding 
 https://www.cnckitchen.com/blog/g-code-basics-for-3d-printing
 https://howtomechatronics.com/tutorials/g-code-explained-list-of-most-important-g-code-commands/
+
+
+6. Prusa Link API
+https://pypi.org/project/PrusaLinkPy/
