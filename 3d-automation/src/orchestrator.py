@@ -15,3 +15,37 @@
 #    optimizer.update(value)
 
 
+# orchestrator.py
+
+import time
+
+
+class PrintOrchestrator:
+    def __init__(self, printer_service):
+        self.printer_service = printer_service
+
+    def run_single_print_cycle(self, gcode_path):
+        if not self.printer_service.wait_until_connected():
+            raise Exception("Printer is not connected")
+
+        if not self.printer_service.upload_gcode(gcode_path):
+            raise Exception("G-code upload failed")
+
+        if not self.printer_service.start_print_job():
+            raise Exception("Print start failed")
+
+        self.wait_until_print_finished()
+
+    def wait_until_print_finished(self, poll_interval_seconds=30):
+        while True:
+            state = self.printer_service.get_printer_state()
+            print("Current printer state:", state)
+
+            if state == "FINISHED":
+                print("Print finished successfully.")
+                return True
+
+            if state in ["STOPPED", "ERROR", "ATTENTION"]:
+                raise Exception(f"Print stopped with state: {state}")
+
+            time.sleep(poll_interval_seconds)

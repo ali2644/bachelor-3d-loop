@@ -72,6 +72,14 @@ class PrusaLinkService:
                 return True
             print(f"Attempt {attempt} of {retries} failed. Retrying in {delay_seconds} seconds...")
             time.sleep(delay_seconds)
-            
+
         print("Failed to connect to the printer after multiple attempts.")
         return False
+    
+    def get_printer_state(self):
+        status = self.get_status()
+
+        if not status:
+            return None
+
+        return status.get("printer", {}).get("state")
