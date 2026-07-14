@@ -6,11 +6,16 @@ import threading
 import time
 from collections.abc import Iterable
 
+import fcntl
+import os
+from typing import TextIO
+
 import serial
 
 from qs.sj220_exceptions import (
     SJ220ConnectionError,
     SJ220DeviceError,
+    SJ220PortInUseError,
     SJ220ProtocolError,
     SJ220ResultError,
     SJ220StateError,
@@ -43,6 +48,7 @@ class SJ220Service:
         measurement_start_timeout_seconds: float = 30.0,
         poll_interval_seconds: float = 0.25,
         transient_retry_count: int = 5,
+        lock_file_path: str = "/tmp/sj220_service.lock",
     ) -> None:
         self._port = port
         self._baudrate = baudrate
@@ -55,6 +61,9 @@ class SJ220Service:
         self._poll_interval_seconds = poll_interval_seconds
         self._transient_retry_count = transient_retry_count
 
+        self._lock_file_path = lock_file_path
+        self._process_lock: TextIO | None = None
+
         self._serial: serial.Serial | None = None
         self._io_lock = threading.Lock()
 
@@ -66,10 +75,12 @@ class SJ220Service:
         )
 
     def connect(self) -> None:
-        """Open the serial connection."""
+        """Open and exclusively reserve the serial connection."""
 
         if self.is_connected:
             return
+
+        self._acquire_process_lock()
 
         try:
             self._serial = serial.Serial(
@@ -85,12 +96,12 @@ class SJ220Service:
                 xonxoff=False,
             )
 
-            # Clear old bytes only once when opening the connection.
             self._serial.reset_input_buffer()
             self._serial.reset_output_buffer()
 
         except (serial.SerialException, OSError) as error:
             self._serial = None
+            self._release_process_lock()
 
             raise SJ220ConnectionError(
                 f"Could not open SJ-220 serial port "
@@ -98,28 +109,33 @@ class SJ220Service:
             ) from error
 
         LOGGER.info(
-            "Connected to SJ-220 on %s with %s baud, 8N1.",
+            "SJ-220 serial port opened on %s with %s baud, 8N1.",
             self._port,
             self._baudrate,
         )
 
     def close(self) -> None:
-        """Close the serial connection."""
+        """Close the serial connection and release the process lock."""
 
-        if self._serial is None:
-            return
+        close_error: serial.SerialException | None = None
 
         try:
-            if self._serial.is_open:
+            if self._serial is not None and self._serial.is_open:
                 self._serial.close()
+
         except serial.SerialException as error:
-            raise SJ220ConnectionError(
-                f"Could not close SJ-220 connection: {error}"
-            ) from error
+            close_error = error
+
         finally:
             self._serial = None
+            self._release_process_lock()
 
         LOGGER.info("SJ-220 connection closed.")
+
+        if close_error is not None:
+            raise SJ220ConnectionError(
+                f"Could not close SJ-220 connection: {close_error}"
+            ) from close_error
 
     def __enter__(self) -> SJ220Service:
         self.connect()
@@ -308,8 +324,13 @@ class SJ220Service:
                 f"{status.value} – {status.description}."
             )
 
-        # CTSTA triggers a physical movement.
-        # It must not automatically be sent multiple times.
+        detector_position = self.get_detector_position()
+
+        LOGGER.info(
+            "Detector position before measurement: %.3f um",
+            detector_position,
+        )
+
         response_payload = self._send_command("CTSTA")
 
         if response_payload:
@@ -518,13 +539,30 @@ class SJ220Service:
         4. Read every configured result
         5. Verify required parameters
         """
-
         started_at = time.monotonic()
 
-        self.start_measurement()
-        self.wait_until_measurement_finished()
+        try:
+            self.start_measurement()
+            self.wait_until_measurement_finished()
+            results = self.read_all_results()
 
-        results = self.read_all_results()
+        except SJ220DeviceError as error:
+            if error.code == "007":
+                try:
+                    position = self.get_detector_position()
+
+                    LOGGER.error(
+                        "Detector over-range occurred. "
+                        "Current detector position: %.3f um",
+                        position,
+                    )
+                except SJ220Error:
+                    LOGGER.error(
+                        "Detector over-range occurred. "
+                        "The detector position could not be read."
+                    )
+
+            raise
 
         available_parameters = {
             result.parameter
@@ -543,9 +581,56 @@ class SJ220Service:
                 f"{sorted(available_parameters)}."
             )
 
-        duration_seconds = time.monotonic() - started_at
-
         return MeasurementReport(
             results=results,
-            duration_seconds=duration_seconds,
+            duration_seconds=time.monotonic() - started_at,
         )
+    def _acquire_process_lock(self) -> None:
+        """
+        Prevent two Python processes from accessing the SJ-220
+        serial interface simultaneously.
+        """
+
+        if self._process_lock is not None:
+            return
+
+        lock_handle = open(
+            self._lock_file_path,
+            mode="a+",
+            encoding="utf-8",
+        )
+
+        try:
+            fcntl.flock(
+                lock_handle.fileno(),
+                fcntl.LOCK_EX | fcntl.LOCK_NB,
+            )
+
+        except BlockingIOError as error:
+            lock_handle.close()
+
+            raise SJ220PortInUseError(
+                "The SJ-220 interface is already being used by "
+                "another process."
+            ) from error
+
+        lock_handle.seek(0)
+        lock_handle.truncate()
+        lock_handle.write(str(os.getpid()))
+        lock_handle.flush()
+
+        self._process_lock = lock_handle
+
+
+    def _release_process_lock(self) -> None:
+        if self._process_lock is None:
+            return
+
+        try:
+            fcntl.flock(
+                self._process_lock.fileno(),
+                fcntl.LOCK_UN,
+            )
+        finally:
+            self._process_lock.close()
+            self._process_lock = None

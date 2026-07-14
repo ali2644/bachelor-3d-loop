@@ -63,6 +63,8 @@ class SJ220StateError(SJ220Error):
 class SJ220ResultError(SJ220Error):
     """Measurement results are missing or inconsistent."""
 
+class SJ220PortInUseError(SJ220ConnectionError):
+    """The SJ-220 serial port is already used by another process."""
 
 class SJ220DeviceError(SJ220Error):
     """An NG error returned directly by the SJ-220."""

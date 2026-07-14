@@ -7,6 +7,7 @@ from qs.sj220_exceptions import (
     SJ220ConnectionError,
     SJ220DeviceError,
     SJ220Error,
+    SJ220PortInUseError,
     SJ220ProtocolError,
     SJ220ResultError,
     SJ220StateError,
@@ -101,6 +102,14 @@ def main() -> int:
 
         return 2
 
+    except SJ220PortInUseError as error:
+        print("\nSchnittstelle wird bereits verwendet")
+        print(error)
+        print(
+            "Beende den anderen SJ-220-Prozess, bevor du eine "
+            "neue Messung startest."
+        )
+        return 3
     except SJ220ConnectionError as error:
         print("\nVerbindungsfehler")
         print(error)
@@ -111,8 +120,16 @@ def main() -> int:
         return 3
 
     except SJ220TimeoutError as error:
-        print("\nZeitüberschreitung")
+        print("\nSJ-220 antwortet nicht")
         print(error)
+        print(
+            "Der serielle Port konnte geöffnet werden, aber vom "
+            "Messgerät kam keine vollständige Antwort."
+        )
+        print(
+            "Prüfe, ob das SJ-220 eingeschaltet ist und ob das "
+            "RS-232C-Kabel vollständig verbunden ist."
+        )
         return 4
 
     except SJ220StateError as error:
