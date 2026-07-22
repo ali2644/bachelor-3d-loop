@@ -1,150 +1,311 @@
-from ast import For
+from __future__ import annotations
 
-from pyniryo import NiryoRobot, JointsPosition, NiryoRobotException
+import logging
+import time
+from contextlib import contextmanager
+from typing import Iterator
+
+from pyniryo import JointsPosition, NiryoRobot, NiryoRobotException
+
+from robot_positions import (
+    HOME,
+    PRINTER_APPROACH,
+    PRINTER_BREAK_OFF,
+    PRINTER_PICK,
+    PRINTER_RETREAT,
+    PRINTER_SAFE,
+    QS_ALIGNMENT_CONTACT,
+    QS_ALIGNMENT_END,
+    QS_ALIGNMENT_ORIENTATION,
+    QS_FINAL_PUSH,
+    QS_FINAL_PUSH_CONTACT,
+    QS_FINAL_PUSH_END,
+    QS_FINAL_PUSH_INTERMEDIATE,
+    QS_FINAL_PUSH_RETREAT,
+    QS_LIFT_LEVER_END,
+    QS_LIFT_LEVER_GRIP,
+    QS_PART_RELEASE,
+    QS_PART_UNDER_PROBE,
+    QS_RETRACT,
+    QS_SAFE,
+    TRANSFER_CLEARANCE,
+    RobotPosition,
+)
+
 
 ROBOT_IP = "10.8.170.41"
 
-HOME_POSITION = JointsPosition(
-    0.049494734798289475, 
-    0.4569904751361611, 
-    -1.1385122098327667, 
-    0.01083051910499222, 
-    -0.9143452031696353, 
-    0.09980140480235944,
-)
+NORMAL_ARM_SPEED_PERCENT = 50
+PUSH_ARM_SPEED_PERCENT = 20
 
-PRINTER_SAFE_POSITION = JointsPosition(
-    -1.496783206664591, 
-    0.61, 
-    0.01284659112285258, 
-    -0.1302957133804865, 
-    -0.6765781810473608, 
-    0.09366548165081712,
-)
+GRIPPER_SETTLING_TIME_SECONDS = 1.0
+LEVER_STEP_WAIT_SECONDS = 3.0
 
-PRINT_BED_APPROACH_POSITION = JointsPosition(
-    -4.528462005280789, 1.6750068908839477, 0.741535516464501, 0.02463634619596311, -1.7426948286278816, -0.04746075083466206,
-)
-PRINT_BED_APPROACH_POSITION_2 = JointsPosition(-1.551572582543197, -0.38228949292885606, -1.2324388488580935, 0.02156838462019195, 1.4433832678105953, 0.06145188510521837,)
+PICK_POSITION_SETTLING_TIME_SECONDS = 0.8
 
-PICK_POSITION = JointsPosition(
-    -1.5607041451896313, -0.535299017792695, -0.7673504911036526, -0.012179192713292153, 1.087499725021127, 0.06451984668098998,
-)
+PRE_GRIP_MAX_TORQUE_PERCENT = 30
+PRE_GRIP_HOLD_TORQUE_PERCENT = 20
+PRE_GRIP_SETTLING_TIME_SECONDS = 0.8
 
-PICK_POSITION_2 = JointsPosition(
--1.53026560303485, -0.5080299935595355, -0.17349174113707, 0.015432461468649183, -0.7087917775929591, -0.0075772503496351895,
-)
+FINAL_GRIP_MAX_TORQUE_PERCENT = 80
+FINAL_GRIP_HOLD_TORQUE_PERCENT = 75
+FINAL_GRIP_SETTLING_TIME_SECONDS = 0.5
 
-BREAK_OFF_RIGHT_POSITION = JointsPosition(
-    -1.7889932113504896, -0.30351231181084004, -0.49163035719059645, -0.23307242616882462, -0.09213150086293131, 0.11207325110544453,
-)
-
-BREAK_OFF_LEFT_POSITION = JointsPosition(
-    -1.606361958421803,
-    -1.0791645566651518,
-    0.7082067090684172,
-    0.03384023092327704,
-    -0.6643063347442757,
-    -0.002975307985978226,
-)
-TEMP_PLACE_POSITION = JointsPosition(
-    1.3948782980396142,
-    -0.6186210362829042,
-    -0.2552988138365482,
-    0.285413080136522,
-    -0.6551024500169618,
-    0.0031606151655640957,
-)
-
-HELPER_POSITION = JointsPosition(
-    -1.4663446645098097,
-    -1.0306862913617576,
-    0.6370042569040566,
-    0.007762557529221059,
-    -0.5691995258953657,
-    0.1028693663781306
-)
-PICK_LIFT_POSITION = None
-QUALITY_STATION_APPROACH_POSITION = None
-PLACE_POSITION = None
+LOGGER = logging.getLogger(__name__)
 
 
+class RobotService:
+    """Controls the fixed printer-to-quality-station handling sequence."""
 
-#damit die Positionen wo Fehler passieren, direkt erkannt werden und nicht erst am Ende, wenn die ganze Sequenz durchgelaufen
-def move_to(robot, position, name):
-    print(f"Moving to {name}...")
-    try:
-        robot.move(position)
-        print(f"Reached {name}")
-    except NiryoRobotException as e:
-        print(f"Error while moving to {name}: {e}")
-        raise
+    def __init__(self, robot_ip: str = ROBOT_IP) -> None:
+        self._robot = NiryoRobot(robot_ip)
 
-def pickup_from_printer_test(robot):
+    def __enter__(self) -> "RobotService":
+        return self
 
-    move_to(robot, HOME_POSITION, "HOME_POSITION")
+    def __exit__(self, exc_type, exc_value, traceback) -> None:
+        self.close()
 
-    robot.grasp_with_tool()
+    def initialize(self) -> None:
+        LOGGER.info("Initializing Niryo robot.")
 
-    move_to(robot, PRINTER_SAFE_POSITION, "PRINTER_SAFE_POSITION")
-    #move_to(robot, PRINT_BED_APPROACH_POSITION, "PRINT_BED_APPROACH_POSITION2")
+        self._robot.calibrate_auto()
+        self._robot.update_tool()
+        self._robot.clear_collision_detected()
+        self._robot.set_arm_max_velocity(NORMAL_ARM_SPEED_PERCENT)
 
-    robot.open_gripper(max_torque_percentage=100, hold_torque_percentage=30)
+        LOGGER.info("Niryo robot initialized.")
 
-    #robot.clear_collision_detected()
+    def close(self) -> None:
+        try:
+            self._robot.close_connection()
+            LOGGER.info("Robot connection closed.")
+        except NiryoRobotException:
+            LOGGER.exception("Could not close the robot connection cleanly.")
 
-    move_to(robot, PICK_POSITION_2, "PICK_POSITION")
-    robot.grasp_with_tool()
+    def move_to(self, position: RobotPosition) -> None:
+        """
+        Move to one documented waypoint.
 
-    #move_to(robot, BREAK_OFF_RIGHT_POSITION, "BREAK_OFF_RIGHT_POSITION")
-    #move_to(robot, BREAK_OFF_LEFT_POSITION, "BREAK_OFF_LEFT_POSITION")
-    move_to(robot, PRINTER_SAFE_POSITION, "PRINTER_SAFE_POSITION")
+        The log name and PyNiryo joint object are derived from the same
+        RobotPosition, so callers cannot accidentally pass the wrong name.
+        """
+        LOGGER.info("Moving to %s.", position.name)
 
-    #for x in range(10):
-     #   move_to(robot, BREAK_OFF_RIGHT_POSITION, "BREAK_OFF_RIGHT_POSITION")
-      #  move_to(robot, BREAK_OFF_LEFT_POSITION, "BREAK_OFF_LEFT_POSITION")
+        try:
+            self._robot.move(position.to_joints_position())
+        except NiryoRobotException:
+            LOGGER.exception("Movement to %s failed.", position.name)
+            raise
 
-    #move_to(robot, PRINT_BED_APPROACH_POSITION, "PRINT_BED_APPROACH_POSITION")
+        LOGGER.info("Reached %s.", position.name)
 
-    move_to(robot, TEMP_PLACE_POSITION, "TEMP_PLACE_POSITION")
+    def open_gripper(
+        self,
+        *,
+        max_torque_percentage: int = 100,
+        hold_torque_percentage: int = 30,
+        settling_time_seconds: float = 0.0,
+    ) -> None:
+        LOGGER.info("Opening gripper.")
 
-    robot.open_gripper(max_torque_percentage=100, hold_torque_percentage=30)
-    move_to(robot, HOME_POSITION, "HOME_POSITION")
-    robot.grasp_with_tool()
+        try:
+            self._robot.open_gripper(
+                max_torque_percentage=max_torque_percentage,
+                hold_torque_percentage=hold_torque_percentage,
+            )
+        except NiryoRobotException:
+            LOGGER.exception("Could not open the gripper.")
+            raise
 
+        if settling_time_seconds > 0:
+            time.sleep(settling_time_seconds)
 
-def main():
-    try:
-        robot = NiryoRobot(ROBOT_IP)
-        robot.calibrate_auto()
-        robot.update_tool()
-        robot.clear_collision_detected()
+    def close_gripper(
+        self,
+        *,
+        max_torque_percentage: int = 100,
+        hold_torque_percentage: int = 80,
+        settling_time_seconds: float = 0.0,
+    ) -> None:
+        LOGGER.info(
+            "Closing gripper with max torque %s%% and hold torque %s%%.",
+            max_torque_percentage,
+            hold_torque_percentage,
+        )
 
-        robot.move(BREAK_OFF_RIGHT_POSITION)
-        #pickup_from_printer_test(robot)
+        try:
+            self._robot.close_gripper(
+                max_torque_percentage=max_torque_percentage,
+                hold_torque_percentage=hold_torque_percentage,
+            )
+        except NiryoRobotException:
+            LOGGER.exception("Could not close the gripper.")
+            raise
 
+        if settling_time_seconds > 0:
+            time.sleep(settling_time_seconds)
+
+    @contextmanager
+    def use_arm_speed(self, speed_percentage: int) -> Iterator[None]:
+        """Temporarily change arm speed and always restore normal speed."""
+        self._robot.set_arm_max_velocity(speed_percentage)
+
+        try:
+            yield
+        finally:
+            try:
+                self._robot.set_arm_max_velocity(NORMAL_ARM_SPEED_PERCENT)
+            except NiryoRobotException:
+                LOGGER.exception(
+                    "Could not restore normal arm speed after a movement error."
+                )
+
+    def grip_printed_part_securely(self) -> None:
+        time.sleep(PICK_POSITION_SETTLING_TIME_SECONDS)
+
+        self.close_gripper(
+            max_torque_percentage=PRE_GRIP_MAX_TORQUE_PERCENT,
+            hold_torque_percentage=PRE_GRIP_HOLD_TORQUE_PERCENT,
+            settling_time_seconds=PRE_GRIP_SETTLING_TIME_SECONDS,
+        )
+
+        self.close_gripper(
+            max_torque_percentage=FINAL_GRIP_MAX_TORQUE_PERCENT,
+            hold_torque_percentage=FINAL_GRIP_HOLD_TORQUE_PERCENT,
+            settling_time_seconds=FINAL_GRIP_SETTLING_TIME_SECONDS,
+        )
+
+    def transfer_part_from_printer_to_qs(self) -> None:
+        """Pick, break off, transport and release one printed part."""
+        LOGGER.info("Starting transfer from printer to quality station.")
+
+        self.move_to(HOME)
+        self.move_to(PRINTER_SAFE)
+
+        self.open_gripper(
+            max_torque_percentage=70,
+            hold_torque_percentage=50,
+            settling_time_seconds=GRIPPER_SETTLING_TIME_SECONDS,
+        )
+
+        self.move_to(PRINTER_APPROACH)
+        self.move_to(PRINTER_PICK)
         
-        #robot.open_gripper(max_torque_percentage=100, hold_torque_percentage=30)
-        #robot.move(ABOVE_PRINT)
-        #robot.move(PICK_PRINT)
-        #robot.grasp_with_tool()
-        #robot.close_gripper(
-        #max_torque_percentage=100,
-        #hold_torque_percentage=80
-        #)
-        #robot.move(ABOVE_PRINT)
-        #robot.move(PLACE_POSITION)
-        #robot.release_with_tool()
-        #robot.move(HOME_POSITION)
+        self.grip_printed_part_securely()
 
-        joints_read = robot.get_joints()
-        print("Aktuelle Joints:")
-        print(joints_read)
+        self.move_to(PRINTER_BREAK_OFF)
+        self.move_to(PRINTER_RETREAT)
+        self.move_to(PRINTER_SAFE)
 
-        #robot.move_home()
+        self.move_to(TRANSFER_CLEARANCE)
+        self.move_to(QS_SAFE)
+        self.move_to(QS_PART_RELEASE)
 
-    finally:
-        robot.close_connection()
+        self.open_gripper(
+            max_torque_percentage=50,
+            hold_torque_percentage=30,
+            settling_time_seconds=GRIPPER_SETTLING_TIME_SECONDS,
+        )
+
+        self.move_to(QS_RETRACT)
+        self.move_to(QS_SAFE)
+
+        # Compact tool shape for the following push movements.
+        self.close_gripper()
+
+        LOGGER.info("Part transferred to the quality station.")
+
+    def align_part_in_qs(self) -> None:
+        """Perform the first alignment of the released part."""
+        LOGGER.info("Starting first quality-station alignment.")
+
+        self.move_to(QS_ALIGNMENT_ORIENTATION)
+
+        with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
+            self.move_to(QS_ALIGNMENT_CONTACT)
+            self.move_to(QS_ALIGNMENT_END)
+
+        self.move_to(QS_SAFE)
+
+        LOGGER.info("First quality-station alignment completed.")
+
+    def push_part_into_measurement_fixture(self) -> None:
+        """Push the aligned part into its final horizontal position."""
+        LOGGER.info("Starting final product push.")
+
+        self.move_to(QS_FINAL_PUSH_CONTACT)
+
+        with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
+            self.move_to(QS_FINAL_PUSH_INTERMEDIATE)
+            self.move_to(QS_FINAL_PUSH_END)
+            self.move_to(QS_FINAL_PUSH)
+
+        self.move_to(QS_FINAL_PUSH_INTERMEDIATE)
+        self.move_to(QS_FINAL_PUSH_RETREAT)
+
+        LOGGER.info("Part pushed into its final horizontal position.")
+
+    def raise_part_to_probe_height(self) -> None:
+        """Operate the lever that raises the part to the Mitutoyo probe."""
+        LOGGER.info("Starting quality-station lift-lever sequence.")
+
+        self.open_gripper()
+        self.move_to(QS_LIFT_LEVER_GRIP)
+        self.close_gripper()
+
+        time.sleep(LEVER_STEP_WAIT_SECONDS)
+
+        with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
+            self.move_to(QS_PART_UNDER_PROBE)
+            time.sleep(LEVER_STEP_WAIT_SECONDS)
+
+            self.move_to(QS_LIFT_LEVER_END)
+            time.sleep(LEVER_STEP_WAIT_SECONDS)
+
+            self.move_to(QS_LIFT_LEVER_GRIP)
+
+        self.open_gripper(
+            settling_time_seconds=GRIPPER_SETTLING_TIME_SECONDS,
+        )
+        self.move_to(QS_RETRACT)
+
+        LOGGER.info("Part raised to the Mitutoyo probe height.")
+
+    def prepare_part_for_measurement(self) -> None:
+        """Execute the complete mechanical sequence before QS measurement."""
+        LOGGER.info("Starting complete part-handling cycle.")
+
+        self.transfer_part_from_printer_to_qs()
+        self.align_part_in_qs()
+        self.push_part_into_measurement_fixture()
+        self.raise_part_to_probe_height()
+        self.move_to(HOME)
+
+        LOGGER.info("Part is ready for the Mitutoyo measurement.")
+
+    def get_current_joints(self) -> JointsPosition:
+        return self._robot.get_joints()
+
+
+def configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(message)s",
+    )
+
+
+def main() -> None:
+    configure_logging()
+
+    with RobotService(ROBOT_IP) as robot_service:
+        robot_service.initialize()
+        robot_service.prepare_part_for_measurement()
+
+        LOGGER.info(
+            "Current joints: %s",
+            robot_service.get_current_joints(),
+        )
 
 
 if __name__ == "__main__":
