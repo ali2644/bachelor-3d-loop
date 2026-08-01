@@ -1,31 +1,381 @@
-from orchestrator import PrintOrchestrator
-from printer.prusalink_service import PrusaLinkService
-from printer.slicer_service import SlicerService
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import os
+from functools import partial
 from pathlib import Path
+from typing import Sequence
 
-PRINTER_IP = "10.8.170.57"
-API_KEY ="uECFo9ZtvraGhNW"
-#TODO Pfade über Path(__file__), damit sie nicht mehr hardcoded sind.
-
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-print ("Project root:", PROJECT_ROOT)
-PRUSASLICER_PATH = Path.home() / "apps/prusaslicer/PrusaSlicer-2.9.1-x86_64.AppImage"
-
-STL_PATH = PROJECT_ROOT / "bachelor-3d-loop/3d-automation/data/models/Oberflächenmessung_Testkörper_MK1 (1).stl"
-PROFILE_PATH = PROJECT_ROOT / "bachelor-3d-loop/3d-automation/config/slicer_profile.ini"
-GCODE_PATH = PROJECT_ROOT / "bachelor-3d-loop/3d-automation/data/gcode/output.gcode"
-
-printer_service = PrusaLinkService(PRINTER_IP, API_KEY)
-slicer_service = SlicerService(PRUSASLICER_PATH)
-
-orchestrator = PrintOrchestrator(slicer_service, printer_service)
-
-orchestrator.run_single_print_cycle(
-    STL_PATH,
-    PROFILE_PATH,
-    GCODE_PATH
+from experiments.experiment_plan import load_experiment_plan
+from experiments.experiment_runner import ExperimentRunner
+from orchestrator import (
+    CycleExecutionError,
+    CycleRequest,
+    CycleResult,
+    PrintOrchestrator,
+)
+from printer.print_parameters import (
+    PrintParameters,
+    SlicerProfileGenerator,
 )
 
 
+LOGGER = logging.getLogger(__name__)
+PROJECT_DIR = Path(__file__).resolve().parents[1]
+EXPERIMENT_PLAN_PATH = (
+    PROJECT_DIR
+    / "config/experiment_plans/experiment_plan_20.csv"
+)
+MAX_EXPERIMENT_CYCLES = 20
 
 
+def experiment_cycle_count(raw_value: str) -> int:
+    try:
+        value = int(raw_value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(
+            "experiment cycles must be an integer."
+        ) from error
+
+    if not 1 <= value <= MAX_EXPERIMENT_CYCLES:
+        raise argparse.ArgumentTypeError(
+            "experiment cycles must be between "
+            f"1 and {MAX_EXPERIMENT_CYCLES}."
+        )
+    return value
+
+
+def parse_arguments(
+    arguments: Sequence[str] | None = None,
+) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Run one bounded 3D-print automation cycle or a "
+            "reproducible experiment plan."
+        ),
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("preflight", "robot-qs", "full", "experiment"),
+        default="preflight",
+        help=(
+            "preflight performs no robot movement; robot-qs uses an "
+            "existing printed part; full also slices and prints; "
+            "experiment runs entries from a CSV plan."
+        ),
+    )
+    parser.add_argument(
+        "--stl",
+        type=Path,
+        default=(
+            PROJECT_DIR
+            / "data/models/Oberflächenmessung_Testkörper_MK1 (1).stl"
+        ),
+    )
+    parser.add_argument(
+        "--profile",
+        type=Path,
+        default=PROJECT_DIR / "config/slicer_profile.ini",
+        help=(
+            "Full, working PrusaSlicer profile used as the unchanged base."
+        ),
+    )
+    parser.add_argument(
+        "--generated-profiles-dir",
+        type=Path,
+        default=PROJECT_DIR / "data/generated_profiles",
+        help="Directory for the generated profile of each cycle.",
+    )
+    parser.add_argument(
+        "--gcode",
+        type=Path,
+        default=PROJECT_DIR / "data/gcode/output.gcode",
+        help=(
+            "G-code output for a single cycle. In experiment mode, "
+            "cycle_NNN.gcode files are written to its parent directory."
+        ),
+    )
+    parser.add_argument(
+        "--results-csv",
+        type=Path,
+        default=(
+            PROJECT_DIR
+            / "data/results/parameter_optimization_cycles.csv"
+        ),
+    )
+    parser.add_argument(
+        "--experiment-plan",
+        type=Path,
+        default=EXPERIMENT_PLAN_PATH,
+        help="CSV file containing the 20 validated parameter sets.",
+    )
+    parser.add_argument(
+        "--experiment-cycles",
+        type=experiment_cycle_count,
+        default=2,
+        help=(
+            "Number of plan entries to run (1-20). Defaults to 2 for "
+            "the first consecutive-cycle hardware test."
+        ),
+    )
+    parser.add_argument(
+        "--top-solid-layers",
+        type=int,
+        help="Top solid layers (2-5). Defaults to the base profile.",
+    )
+    parser.add_argument(
+        "--print-speed",
+        type=float,
+        help=(
+            "Top solid infill speed in mm/s (50-200). "
+            "Defaults to the base profile."
+        ),
+    )
+    parser.add_argument(
+        "--extrusion-width",
+        type=float,
+        help=(
+            "Top infill extrusion width in mm (0.30-0.50). "
+            "Defaults to the base profile."
+        ),
+    )
+    parser.add_argument(
+        "--extrusion-multiplier",
+        type=float,
+        help=(
+            "Extrusion multiplier (0.80-1.20). "
+            "Defaults to the base profile."
+        ),
+    )
+    parser.add_argument(
+        "--temperature",
+        type=int,
+        help=(
+            "PLA print temperature in degrees Celsius (185-235). "
+            "Defaults to the base profile."
+        ),
+    )
+    parser.add_argument(
+        "--fan-speed",
+        type=int,
+        help=(
+            "Fixed part-cooling fan speed in percent (0-100). "
+            "Defaults to max_fan_speed from the base profile."
+        ),
+    )
+    return parser.parse_args(arguments)
+
+
+def required_environment(name: str) -> str:
+    value = os.getenv(name)
+    if not value:
+        raise RuntimeError(
+            f"Required environment variable {name} is not set."
+        )
+    return value
+
+
+def build_orchestrator(
+    results_csv: Path,
+) -> PrintOrchestrator:
+    from printer.prusalink_service import PrusaLinkService
+    from printer.slicer_service import SlicerService
+    from qs.qs_api_client import QualityStationClient
+    from results.csv_cycle_recorder import CsvCycleRecorder
+    from robot.robot_service import RobotService
+
+    printer_ip = os.getenv("PRINTER_IP", "10.8.170.57")
+    robot_ip = os.getenv("ROBOT_IP", "10.8.170.41")
+    api_key = required_environment("PRUSALINK_API_KEY")
+    qs_base_url = required_environment("QS_BASE_URL")
+
+    slicer_path = Path(
+        os.getenv(
+            "PRUSASLICER_PATH",
+            str(
+                Path.home()
+                / "apps/prusaslicer/"
+                "PrusaSlicer-2.9.1-x86_64.AppImage"
+            ),
+        )
+    )
+
+    printer_service = PrusaLinkService(
+        printer_ip,
+        api_key,
+        remote_gcode_path=os.getenv(
+            "REMOTE_GCODE_PATH",
+            "FOLDER/demo.gcode",
+        ),
+    )
+    slicer_service = SlicerService(slicer_path)
+    quality_station = QualityStationClient(qs_base_url)
+    cycle_recorder = CsvCycleRecorder(results_csv)
+
+    return PrintOrchestrator(
+        slicer_service,
+        printer_service,
+        partial(RobotService, robot_ip),
+        quality_station,
+        cycle_recorder,
+        print_poll_interval_seconds=float(
+            os.getenv("PRINT_POLL_SECONDS", "15")
+        ),
+        print_start_timeout_seconds=float(
+            os.getenv("PRINT_START_TIMEOUT_SECONDS", "180")
+        ),
+        print_timeout_seconds=float(
+            os.getenv("PRINT_TIMEOUT_SECONDS", str(8 * 60 * 60))
+        ),
+        max_consecutive_status_errors=int(
+            os.getenv("MAX_STATUS_ERRORS", "5")
+        ),
+        cooling_time_seconds=float(
+            os.getenv("PART_COOLING_SECONDS", "60")
+        ),
+    )
+
+
+def build_single_cycle_request(
+    arguments: argparse.Namespace,
+) -> CycleRequest:
+    base_profile_path = arguments.profile.resolve()
+    print_parameters = PrintParameters.from_profile(
+        base_profile_path,
+        top_solid_layers=arguments.top_solid_layers,
+        print_speed=arguments.print_speed,
+        extrusion_width=arguments.extrusion_width,
+        extrusion_multiplier=arguments.extrusion_multiplier,
+        temperature=arguments.temperature,
+        fan_speed=arguments.fan_speed,
+    )
+    generated_profile_path = SlicerProfileGenerator(
+        arguments.generated_profiles_dir.resolve()
+    ).generate(
+        base_profile_path,
+        print_parameters,
+    )
+    LOGGER.info(
+        "Generated cycle profile %s with parameters %s.",
+        generated_profile_path,
+        print_parameters.as_record(),
+    )
+
+    return CycleRequest(
+        stl_path=arguments.stl.resolve(),
+        profile_path=generated_profile_path,
+        gcode_path=arguments.gcode.resolve(),
+        print_parameters=print_parameters.as_record(),
+    )
+
+
+def run_experiment(
+    arguments: argparse.Namespace,
+) -> tuple[CycleResult, ...]:
+    parameter_overrides = {
+        "--top-solid-layers": arguments.top_solid_layers,
+        "--print-speed": arguments.print_speed,
+        "--extrusion-width": arguments.extrusion_width,
+        "--extrusion-multiplier": arguments.extrusion_multiplier,
+        "--temperature": arguments.temperature,
+        "--fan-speed": arguments.fan_speed,
+    }
+    supplied_overrides = [
+        name
+        for name, value in parameter_overrides.items()
+        if value is not None
+    ]
+    if supplied_overrides:
+        raise ValueError(
+            "Experiment parameters come from the CSV plan; remove CLI "
+            f"overrides: {', '.join(supplied_overrides)}."
+        )
+
+    complete_plan = load_experiment_plan(
+        arguments.experiment_plan.resolve()
+    )
+    selected_plan = complete_plan[: arguments.experiment_cycles]
+    LOGGER.info(
+        "Loaded %s valid plan entries; running the first %s.",
+        len(complete_plan),
+        len(selected_plan),
+    )
+
+    orchestrator = build_orchestrator(arguments.results_csv.resolve())
+    runner = ExperimentRunner(
+        orchestrator,
+        SlicerProfileGenerator(
+            arguments.generated_profiles_dir.resolve()
+        ),
+        arguments.gcode.resolve().parent,
+    )
+    return runner.run(
+        selected_plan,
+        stl_path=arguments.stl.resolve(),
+        base_profile_path=arguments.profile.resolve(),
+    )
+
+
+def main(arguments: Sequence[str] | None = None) -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    )
+    parsed_arguments = parse_arguments(arguments)
+
+    try:
+        if parsed_arguments.mode == "experiment":
+            results = run_experiment(parsed_arguments)
+            print(
+                json.dumps(
+                    {
+                        "mode": "experiment",
+                        "completed_cycles": len(results),
+                        "results": [
+                            result.as_dict()
+                            for result in results
+                        ],
+                    },
+                    indent=2,
+                    ensure_ascii=False,
+                )
+            )
+            return 0
+
+        request = build_single_cycle_request(parsed_arguments)
+        orchestrator = build_orchestrator(
+            parsed_arguments.results_csv.resolve()
+        )
+
+        if parsed_arguments.mode == "preflight":
+            orchestrator.run_preflight(request)
+            LOGGER.info(
+                "Preflight passed. No robot movement was performed."
+            )
+            return 0
+
+        if parsed_arguments.mode == "robot-qs":
+            result = orchestrator.run_handling_and_measurement_cycle(
+                request
+            )
+        else:
+            result = orchestrator.run_single_print_cycle(request)
+
+    except (CycleExecutionError, RuntimeError, ValueError) as error:
+        LOGGER.error("%s", error)
+        return 1
+
+    print(
+        json.dumps(
+            result.as_dict(),
+            indent=2,
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
