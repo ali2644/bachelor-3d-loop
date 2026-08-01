@@ -454,12 +454,12 @@ QS_LIFT_LEVER_GRIP: Final = RobotPosition(
 QS_PART_UNDER_PROBE: Final = RobotPosition(
     name="QS_PART_UNDER_PROBE",
     joints=(
-        1.5333736648438685,
-        -0.6428601689346015,
-        0.800618402303013,
-        0.07985965455984623,
-        -1.2993743809289309,
-        0.006228576741335257,
+        1.5366305888544294,
+        -0.6348764046174488,
+        0.7864385097017702,
+        0.0948159672417313,
+        -1.2994204003525673,
+        -0.0494089064352770,
     ),
     station=RobotStation.QUALITY_STATION,
     purpose=(

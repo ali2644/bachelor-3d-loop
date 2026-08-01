@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from pathlib import Path
 
-from robot_positions import ALL_POSITIONS, RobotPosition, RobotStation
+from robot.robot_positions import ALL_POSITIONS, RobotPosition, RobotStation
 
 
 SRC_DIR = Path(__file__).resolve().parent.parent

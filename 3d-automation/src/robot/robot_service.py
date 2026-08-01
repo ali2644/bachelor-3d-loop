@@ -7,7 +7,7 @@ from typing import Iterator
 
 from pyniryo import JointsPosition, NiryoRobot, NiryoRobotException
 
-from robot_positions import (
+from robot.robot_positions import (
     HOME,
     PRINTER_APPROACH,
     PRINTER_BREAK_OFF,
@@ -39,6 +39,7 @@ NORMAL_ARM_SPEED_PERCENT = 50
 PUSH_ARM_SPEED_PERCENT = 20
 
 GRIPPER_SETTLING_TIME_SECONDS = 1.0
+PART_RELEASE_SETTLING_TIME_SECONDS = 1.5
 LEVER_STEP_WAIT_SECONDS = 3.0
 
 PICK_POSITION_SETTLING_TIME_SECONDS = 0.8
@@ -82,6 +83,16 @@ class RobotService:
             LOGGER.info("Robot connection closed.")
         except NiryoRobotException:
             LOGGER.exception("Could not close the robot connection cleanly.")
+
+    def check_connection(self) -> None:
+        """Read the current joints without calibrating or moving the arm."""
+        try:
+            self._robot.get_joints()
+        except NiryoRobotException:
+            LOGGER.exception("Robot connection check failed.")
+            raise
+
+        LOGGER.info("Robot connection check passed.")
 
     def move_to(self, position: RobotPosition) -> None:
         """
@@ -203,9 +214,9 @@ class RobotService:
         self.move_to(QS_PART_RELEASE)
 
         self.open_gripper(
-            max_torque_percentage=50,
-            hold_torque_percentage=30,
-            settling_time_seconds=GRIPPER_SETTLING_TIME_SECONDS,
+            max_torque_percentage=100,
+            hold_torque_percentage=50,
+            settling_time_seconds=PART_RELEASE_SETTLING_TIME_SECONDS,
         )
 
         self.move_to(QS_RETRACT)
@@ -247,7 +258,13 @@ class RobotService:
         LOGGER.info("Part pushed into its final horizontal position.")
 
     def raise_part_to_probe_height(self) -> None:
-        """Operate the lever that raises the part to the Mitutoyo probe."""
+        """
+        Raise the part to the probe and stop there for the measurement.
+
+        The gripper keeps holding the lift lever. The lever must only be moved
+        farther by complete_part_handling_after_measurement() after valid
+        measurement values have been received.
+        """
         LOGGER.info("Starting quality-station lift-lever sequence.")
 
         self.open_gripper()
@@ -258,8 +275,23 @@ class RobotService:
 
         with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
             self.move_to(QS_PART_UNDER_PROBE)
-            time.sleep(LEVER_STEP_WAIT_SECONDS)
 
+        LOGGER.info("Part raised to the Mitutoyo probe height.")
+        time.sleep(LEVER_STEP_WAIT_SECONDS)
+
+    def complete_part_handling_after_measurement(self) -> None:
+        """
+        Finish the lift-lever sequence after a successful QS measurement.
+
+        This method must not be called if starting the measurement failed or
+        if no valid Ra/Rz values were returned.
+        """
+        LOGGER.info(
+            "Measurement completed; continuing quality-station "
+            "lift-lever sequence."
+        )
+
+        with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
             self.move_to(QS_LIFT_LEVER_END)
             time.sleep(LEVER_STEP_WAIT_SECONDS)
 
@@ -269,8 +301,9 @@ class RobotService:
             settling_time_seconds=GRIPPER_SETTLING_TIME_SECONDS,
         )
         self.move_to(QS_RETRACT)
+        self.move_to(HOME)
 
-        LOGGER.info("Part raised to the Mitutoyo probe height.")
+        LOGGER.info("Post-measurement robot handling completed.")
 
     def prepare_part_for_measurement(self) -> None:
         """Execute the complete mechanical sequence before QS measurement."""
@@ -280,7 +313,6 @@ class RobotService:
         self.align_part_in_qs()
         self.push_part_into_measurement_fixture()
         self.raise_part_to_probe_height()
-        self.move_to(HOME)
 
         LOGGER.info("Part is ready for the Mitutoyo measurement.")
 
