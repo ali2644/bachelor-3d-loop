@@ -20,6 +20,7 @@ from qs.sj220_exceptions import (
     SJ220ResultError,
     SJ220StateError,
     SJ220TimeoutError,
+    SJ220Error,
 )
 from qs.sj220_models import (
     MeasurementReport,
@@ -560,6 +561,28 @@ class SJ220Service:
                     LOGGER.error(
                         "Detector over-range occurred. "
                         "The detector position could not be read."
+                    )
+
+                LOGGER.warning(
+                    "Starting one additional measurement attempt "
+                    "to clear SJ-220 error 007."
+                )
+
+                try:
+                    self.start_measurement()
+                    self.wait_until_measurement_finished()
+
+                except SJ220Error as reset_error:
+                    LOGGER.info(
+                        "Additional measurement attempt ended with: %s. "
+                        "The response is intentionally ignored.",
+                        reset_error,
+                    )
+
+                else:
+                    LOGGER.info(
+                        "Additional measurement attempt completed. "
+                        "Its result is intentionally ignored."
                     )
 
             raise

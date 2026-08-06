@@ -147,15 +147,18 @@ class PrintOrchestrator:
     """
     Execute one bounded print, handling and measurement cycle.
 
-    A failed stage aborts the cycle immediately. In particular, measurement
-    never starts after a robot error and the robot never starts before a newly
-    started print was observed as active and subsequently finished.
+    A failed stage aborts the cycle immediately, except for a failed QS
+    measurement, which produces fixed penalty values so that robot handling
+    and the experiment can continue. Measurement never starts after a robot
+    error and the robot never starts before a newly started print was observed
+    as active and subsequently finished.
     """
 
     ACTIVE_PRINT_STATES = frozenset({"PRINTING", "PAUSED"})
     FAILED_PRINT_STATES = frozenset({"STOPPED", "ERROR", "ATTENTION"})
     READY_PRINT_STATES = frozenset({"IDLE", "FINISHED"})
     REQUIRED_MEASUREMENTS = ("Ra", "Rz")
+    MEASUREMENT_PENALTY_VALUE = 100.0
 
     def __init__(
         self,
@@ -297,6 +300,7 @@ class PrintOrchestrator:
         profile_sha256 = ""
         printer_states: tuple[str, ...] = ()
         measurements: dict[str, float] = {}
+        measurement_error: str | None = None
 
         LOGGER.info(
             "Starting %s cycle %s.",
@@ -370,23 +374,32 @@ class PrintOrchestrator:
                     measurements = self._validate_measurements(
                         self.quality_station.measure()
                     )
-                except Exception:
-                    LOGGER.error(
-                        "Cycle %s: QS measurement failed. The robot "
-                        "sequence will not continue from "
-                        "QS_PART_UNDER_PROBE; inspect the real system "
-                        "before any restart.",
-                        cycle_id,
+                except Exception as error:
+                    measurement_error = (
+                        "QS measurement failed; penalty values were used: "
+                        f"{type(error).__name__}: {error}"
                     )
-                    raise
-
-                LOGGER.info(
-                    "Cycle %s: QS measurement completed; Ra=%s um, "
-                    "Rz=%s um.",
-                    cycle_id,
-                    measurements["Ra"],
-                    measurements["Rz"],
-                )
+                    measurements = {
+                        parameter: self.MEASUREMENT_PENALTY_VALUE
+                        for parameter in self.REQUIRED_MEASUREMENTS
+                    }
+                    LOGGER.warning(
+                        "Cycle %s: QS measurement failed. Saving "
+                        "Ra=%.1f um and Rz=%.1f um as penalty values and "
+                        "continuing robot handling immediately.",
+                        cycle_id,
+                        measurements["Ra"],
+                        measurements["Rz"],
+                        exc_info=True,
+                    )
+                else:
+                    LOGGER.info(
+                        "Cycle %s: QS measurement completed; Ra=%s um, "
+                        "Rz=%s um.",
+                        cycle_id,
+                        measurements["Ra"],
+                        measurements["Rz"],
+                    )
 
                 stage = CycleStage.ROBOT_HANDLING
                 robot_service.complete_part_handling_after_measurement()
@@ -407,17 +420,27 @@ class PrintOrchestrator:
                 print_parameters=dict(request.print_parameters),
                 measurements=measurements,
                 printer_states=printer_states,
+                error=measurement_error,
             )
 
             stage = CycleStage.RECORDING
             self.cycle_recorder.record(result)
 
-            LOGGER.info(
-                "Cycle %s completed: Ra=%s um, Rz=%s um.",
-                cycle_id,
-                measurements["Ra"],
-                measurements["Rz"],
-            )
+            if measurement_error is None:
+                LOGGER.info(
+                    "Cycle %s completed: Ra=%s um, Rz=%s um.",
+                    cycle_id,
+                    measurements["Ra"],
+                    measurements["Rz"],
+                )
+            else:
+                LOGGER.warning(
+                    "Cycle %s completed with measurement penalty: "
+                    "Ra=%s um, Rz=%s um.",
+                    cycle_id,
+                    measurements["Ra"],
+                    measurements["Rz"],
+                )
             return result
 
         except Exception as error:
