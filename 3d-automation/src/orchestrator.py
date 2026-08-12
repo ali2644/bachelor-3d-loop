@@ -370,28 +370,77 @@ class PrintOrchestrator:
                     "measurement.",
                     cycle_id,
                 )
+
                 try:
                     measurements = self._validate_measurements(
                         self.quality_station.measure()
                     )
+
                 except Exception as error:
                     measurement_error = (
                         "QS measurement failed; penalty values were used: "
                         f"{type(error).__name__}: {error}"
                     )
+
                     measurements = {
                         parameter: self.MEASUREMENT_PENALTY_VALUE
                         for parameter in self.REQUIRED_MEASUREMENTS
                     }
+
                     LOGGER.warning(
                         "Cycle %s: QS measurement failed. Saving "
-                        "Ra=%.1f um and Rz=%.1f um as penalty values and "
-                        "continuing robot handling immediately.",
+                        "Ra=%.1f um and Rz=%.1f um as penalty values.",
                         cycle_id,
                         measurements["Ra"],
                         measurements["Rz"],
                         exc_info=True,
                     )
+
+                    error_message = str(error)
+
+                    reset_required = (
+                        "HTTP 409" in error_message
+                        and "CTSTA was accepted" in error_message
+                        and "no measurement movement was detected"
+                        in error_message
+                    )
+
+                    if reset_required:
+                        LOGGER.warning(
+                            "Cycle %s: starting one additional QS "
+                            "measurement attempt to reset the SJ-220 "
+                            "error state. The result will be ignored.",
+                            cycle_id,
+                        )
+
+                        try:
+                            self.quality_station.measure()
+
+                        except Exception as reset_error:
+                            LOGGER.info(
+                                "Cycle %s: additional QS reset attempt "
+                                "ended with %s: %s. The result is "
+                                "intentionally ignored.",
+                                cycle_id,
+                                type(reset_error).__name__,
+                                reset_error,
+                            )
+
+                        else:
+                            LOGGER.info(
+                                "Cycle %s: additional QS reset attempt "
+                                "completed successfully. Its result is "
+                                "intentionally ignored.",
+                                cycle_id,
+                            )
+
+                    else:
+                        LOGGER.info(
+                            "Cycle %s: no automatic SJ-220 reset attempt "
+                            "is required for this measurement error.",
+                            cycle_id,
+                        )
+
                 else:
                     LOGGER.info(
                         "Cycle %s: QS measurement completed; Ra=%s um, "

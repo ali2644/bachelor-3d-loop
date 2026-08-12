@@ -9,24 +9,22 @@ from pyniryo import JointsPosition, NiryoRobot, NiryoRobotException
 
 from robot.robot_positions import (
     HOME,
-    PRINTER_APPROACH,
     PRINTER_BREAK_OFF,
+    PRINTER_BREAK_OFF_1,
+    PRINTER_OUTSIDE,
     PRINTER_PICK,
-    PRINTER_RETREAT,
     PRINTER_SAFE,
     QS_ALIGNMENT_CONTACT,
     QS_ALIGNMENT_END,
     QS_ALIGNMENT_ORIENTATION,
-    QS_FINAL_PUSH,
+    QS_ALIGNMENT_RETREAT,
     QS_FINAL_PUSH_CONTACT,
-    QS_FINAL_PUSH_END,
-    QS_FINAL_PUSH_INTERMEDIATE,
-    QS_FINAL_PUSH_RETREAT,
+    QS_FINAL_PUSH_TARGET,
     QS_LIFT_LEVER_END,
     QS_LIFT_LEVER_GRIP,
+    QS_PART_SHIFT_END,
     QS_PART_RELEASE,
     QS_PART_UNDER_PROBE,
-    QS_RETRACT,
     QS_SAFE,
     TRANSFER_CLEARANCE,
     RobotPosition,
@@ -192,22 +190,26 @@ class RobotService:
         LOGGER.info("Starting transfer from printer to quality station.")
 
         self.move_to(HOME)
+        self.close_gripper()
+
         self.move_to(PRINTER_SAFE)
 
         self.open_gripper(
-            max_torque_percentage=70,
+            max_torque_percentage=50,
             hold_torque_percentage=50,
             settling_time_seconds=GRIPPER_SETTLING_TIME_SECONDS,
         )
 
-        self.move_to(PRINTER_APPROACH)
-        self.move_to(PRINTER_PICK)
-        
+        with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
+            self.move_to(PRINTER_PICK)
+
         self.grip_printed_part_securely()
 
-        self.move_to(PRINTER_BREAK_OFF)
-        self.move_to(PRINTER_RETREAT)
-        self.move_to(PRINTER_SAFE)
+        with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
+            self.move_to(PRINTER_BREAK_OFF_1)
+            self.move_to(PRINTER_BREAK_OFF)
+            
+        self.move_to(PRINTER_OUTSIDE)
 
         self.move_to(TRANSFER_CLEARANCE)
         self.move_to(QS_SAFE)
@@ -219,7 +221,7 @@ class RobotService:
             settling_time_seconds=PART_RELEASE_SETTLING_TIME_SECONDS,
         )
 
-        self.move_to(QS_RETRACT)
+
         self.move_to(QS_SAFE)
 
         # Compact tool shape for the following push movements.
@@ -232,12 +234,15 @@ class RobotService:
         LOGGER.info("Starting first quality-station alignment.")
 
         self.move_to(QS_ALIGNMENT_ORIENTATION)
+        
 
         with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
             self.move_to(QS_ALIGNMENT_CONTACT)
             self.move_to(QS_ALIGNMENT_END)
+            self.move_to(QS_ALIGNMENT_CONTACT)
 
-        self.move_to(QS_SAFE)
+
+        self.move_to(QS_ALIGNMENT_RETREAT)
 
         LOGGER.info("First quality-station alignment completed.")
 
@@ -248,12 +253,10 @@ class RobotService:
         self.move_to(QS_FINAL_PUSH_CONTACT)
 
         with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
-            self.move_to(QS_FINAL_PUSH_INTERMEDIATE)
-            self.move_to(QS_FINAL_PUSH_END)
-            self.move_to(QS_FINAL_PUSH)
+            self.move_to(QS_FINAL_PUSH_TARGET)
+            self.move_to(QS_FINAL_PUSH_CONTACT)
 
-        self.move_to(QS_FINAL_PUSH_INTERMEDIATE)
-        self.move_to(QS_FINAL_PUSH_RETREAT)
+        self.move_to(QS_SAFE)
 
         LOGGER.info("Part pushed into its final horizontal position.")
 
@@ -295,12 +298,12 @@ class RobotService:
             self.move_to(QS_LIFT_LEVER_END)
             time.sleep(LEVER_STEP_WAIT_SECONDS)
 
-            self.move_to(QS_LIFT_LEVER_GRIP)
+            self.move_to(QS_PART_SHIFT_END)
 
         self.open_gripper(
             settling_time_seconds=GRIPPER_SETTLING_TIME_SECONDS,
         )
-        self.move_to(QS_RETRACT)
+        self.move_to(QS_SAFE)
         self.move_to(HOME)
 
         LOGGER.info("Post-measurement robot handling completed.")
@@ -313,6 +316,9 @@ class RobotService:
         self.align_part_in_qs()
         self.push_part_into_measurement_fixture()
         self.raise_part_to_probe_height()
+
+        self.close_gripper()
+
 
         LOGGER.info("Part is ready for the Mitutoyo measurement.")
 

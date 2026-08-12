@@ -129,7 +129,7 @@ def parse_arguments(
         "--print-speed",
         type=float,
         help=(
-            "Top solid infill speed in mm/s (50-200). "
+            "Top solid infill speed in mm/s (50-160). "
             "Defaults to the base profile."
         ),
     )
@@ -137,7 +137,7 @@ def parse_arguments(
         "--extrusion-width",
         type=float,
         help=(
-            "Top infill extrusion width in mm (0.30-0.50). "
+            "Top infill extrusion width in mm (0.35-0.50). "
             "Defaults to the base profile."
         ),
     )
@@ -145,7 +145,7 @@ def parse_arguments(
         "--extrusion-multiplier",
         type=float,
         help=(
-            "Extrusion multiplier (0.80-1.20). "
+            "Extrusion multiplier (0.90-1.20). "
             "Defaults to the base profile."
         ),
     )
@@ -153,7 +153,7 @@ def parse_arguments(
         "--temperature",
         type=int,
         help=(
-            "PLA print temperature in degrees Celsius (185-235). "
+            "PLA print temperature in degrees Celsius (195-235). "
             "Defaults to the base profile."
         ),
     )

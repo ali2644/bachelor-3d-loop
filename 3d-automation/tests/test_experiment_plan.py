@@ -25,10 +25,10 @@ def valid_rows() -> list[dict[str, object]]:
         {
             "cycle_number": cycle_number,
             "top_solid_layers": 2 + (cycle_number - 1) % 4,
-            "print_speed": 50 + 7 * (cycle_number - 1),
-            "extrusion_width": 0.30 + 0.01 * (cycle_number - 1),
-            "extrusion_multiplier": 0.80 + 0.02 * (cycle_number - 1),
-            "temperature": 185 + 2 * (cycle_number - 1),
+            "print_speed": 50 + 5 * (cycle_number - 1),
+            "extrusion_width": 0.35 + 0.007 * (cycle_number - 1),
+            "extrusion_multiplier": 0.90 + 0.01 * (cycle_number - 1),
+            "temperature": 195 + 2 * (cycle_number - 1),
             "fan_speed": 5 * (cycle_number - 1),
         }
         for cycle_number in range(1, 21)
@@ -76,9 +76,9 @@ class ExperimentPlanTest(unittest.TestCase):
             PrintParameters(
                 top_solid_layers=2,
                 print_speed=50,
-                extrusion_width=0.30,
-                extrusion_multiplier=0.80,
-                temperature=185,
+                extrusion_width=0.35,
+                extrusion_multiplier=0.90,
+                temperature=195,
                 fan_speed=0,
             ),
         )
@@ -101,7 +101,7 @@ class ExperimentPlanTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            r"row 6: temperature must be between 185 and 235",
+            r"row 6: temperature must be between 195 and 235",
         ):
             load_experiment_plan(self.plan_path)
 

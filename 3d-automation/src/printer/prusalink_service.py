@@ -183,8 +183,8 @@ class PrusaLinkService:
 
     def wait_until_connected(
         self,
-        retries: int = 10,
-        delay_seconds: float = 3,
+        retries: int = 20,
+        delay_seconds: float = 10,
     ) -> bool:
         for attempt in range(1, retries + 1):
             if self.is_connected():

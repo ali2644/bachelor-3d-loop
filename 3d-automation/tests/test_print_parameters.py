@@ -95,10 +95,10 @@ class PrintParametersTest(unittest.TestCase):
     def test_generated_profile_changes_only_controlled_settings(self) -> None:
         parameters = PrintParameters(
             top_solid_layers=2,
-            print_speed=200,
-            extrusion_width=0.30,
-            extrusion_multiplier=0.80,
-            temperature=185,
+            print_speed=160,
+            extrusion_width=0.35,
+            extrusion_multiplier=0.90,
+            temperature=195,
             fan_speed=25,
         )
 
@@ -113,10 +113,10 @@ class PrintParametersTest(unittest.TestCase):
         original = self.base_profile.read_text(encoding="utf-8")
 
         self.assertIn("top_solid_layers = 2\n", generated)
-        self.assertIn("top_solid_infill_speed = 200\n", generated)
-        self.assertIn("top_infill_extrusion_width = 0.3\n", generated)
-        self.assertIn("extrusion_multiplier = 0.8\n", generated)
-        self.assertIn("temperature = 185\n", generated)
+        self.assertIn("top_solid_infill_speed = 160\n", generated)
+        self.assertIn("top_infill_extrusion_width = 0.35\n", generated)
+        self.assertIn("extrusion_multiplier = 0.9\n", generated)
+        self.assertIn("temperature = 195\n", generated)
         self.assertIn("min_fan_speed = 25\n", generated)
         self.assertIn("max_fan_speed = 25\n", generated)
         self.assertIn("bridge_fan_speed = 25\n", generated)

@@ -289,7 +289,9 @@ class PrintOrchestratorTest(unittest.TestCase):
             calls.index("robot.complete"),
         )
 
-    def test_measurement_failure_stops_robot_under_probe(self) -> None:
+    def test_measurement_failure_uses_penalty_and_completes_robot(
+        self,
+    ) -> None:
         calls: list[str] = []
         orchestrator, recorder = self.create_orchestrator(
             calls,
@@ -297,18 +299,37 @@ class PrintOrchestratorTest(unittest.TestCase):
             fail_measurement=True,
         )
 
-        with self.assertRaises(CycleExecutionError) as context:
-            orchestrator.run_handling_and_measurement_cycle(self.request)
+        result = orchestrator.run_handling_and_measurement_cycle(
+            self.request
+        )
 
-        self.assertEqual(context.exception.stage, CycleStage.MEASURING)
-        self.assertIn("robot.prepare", calls)
-        self.assertIn("qs.measure", calls)
-        self.assertNotIn("robot.complete", calls)
-        self.assertIn("robot.exit", calls)
-        self.assertEqual(recorder.results[-1].status, CycleStatus.FAILED)
+        self.assertEqual(result.status, CycleStatus.COMPLETED)
         self.assertEqual(
-            recorder.results[-1].stage,
-            CycleStage.MEASURING,
+            result.measurements,
+            {"Ra": 100.0, "Rz": 100.0},
+        )
+        self.assertIn(
+            "penalty values were used",
+            result.error or "",
+        )
+
+        self.assertIn("robot.prepare", calls)
+        self.assertEqual(calls.count("qs.measure"), 1)
+        self.assertIn("robot.complete", calls)
+        self.assertIn("robot.exit", calls)
+
+        self.assertLess(
+            calls.index("qs.measure"),
+            calls.index("robot.complete"),
+        )
+
+        self.assertEqual(
+            recorder.results[-1].status,
+            CycleStatus.COMPLETED,
+        )
+        self.assertEqual(
+            recorder.results[-1].measurements,
+            {"Ra": 100.0, "Rz": 100.0},
         )
 
 
