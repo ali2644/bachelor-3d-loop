@@ -183,6 +183,7 @@ def build_orchestrator(
     from printer.prusalink_service import PrusaLinkService
     from printer.slicer_service import SlicerService
     from qs.qs_api_client import QualityStationClient
+    from camera.camera_client import CameraClient
     from results.csv_cycle_recorder import CsvCycleRecorder
     from robot.robot_service import RobotService
 
@@ -190,6 +191,7 @@ def build_orchestrator(
     robot_ip = os.getenv("ROBOT_IP", "10.8.170.41")
     api_key = required_environment("PRUSALINK_API_KEY")
     qs_base_url = required_environment("QS_BASE_URL")
+    camera_base_url = os.getenv("CAMERA_BASE_URL", qs_base_url) #qs url ist default weil beide auf dem gleichen raspberry laufen
 
     slicer_path = Path(
         os.getenv(
@@ -212,6 +214,7 @@ def build_orchestrator(
     )
     slicer_service = SlicerService(slicer_path)
     quality_station = QualityStationClient(qs_base_url)
+    camera_service = CameraClient(camera_base_url)
     cycle_recorder = CsvCycleRecorder(results_csv)
 
     return PrintOrchestrator(
@@ -220,6 +223,7 @@ def build_orchestrator(
         partial(RobotService, robot_ip),
         quality_station,
         cycle_recorder,
+        camera_service,
         print_poll_interval_seconds=float(
             os.getenv("PRINT_POLL_SECONDS", "15")
         ),
@@ -236,6 +240,7 @@ def build_orchestrator(
             os.getenv("PART_COOLING_SECONDS", "60")
         ),
     )
+
 
 
 def build_single_cycle_request(

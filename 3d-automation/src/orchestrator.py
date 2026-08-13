@@ -60,6 +60,13 @@ class QualityStationProtocol(Protocol):
 
     def measure(self) -> dict[str, float]: ...
 
+class CameraServiceProtocol(Protocol):
+    def health(self) -> bool: ...
+
+    def capture_still(
+        self,
+        cycle_id: str,
+    ) -> str: ...
 
 class CycleRecorderProtocol(Protocol):
     def record(self, result: "CycleResult") -> None: ...
@@ -71,6 +78,7 @@ class CycleStage(str, Enum):
     UPLOADING = "uploading"
     STARTING_PRINT = "starting_print"
     WAITING_FOR_PRINT = "waiting_for_print"
+    CAMERA_CAPTURE = "camera_capture"
     COOLING = "cooling"
     ROBOT_HANDLING = "robot_handling"
     MEASURING = "measuring"
@@ -167,6 +175,7 @@ class PrintOrchestrator:
         robot_service_factory: RobotServiceFactory,
         quality_station: QualityStationProtocol,
         cycle_recorder: CycleRecorderProtocol,
+        camera_service: CameraServiceProtocol | None = None,
         *,
         print_poll_interval_seconds: float = 15.0,
         print_start_timeout_seconds: float = 180.0,
@@ -192,6 +201,7 @@ class PrintOrchestrator:
         self.robot_service_factory = robot_service_factory
         self.quality_station = quality_station
         self.cycle_recorder = cycle_recorder
+        self.camera_service = camera_service
 
         self.print_poll_interval_seconds = print_poll_interval_seconds
         self.print_start_timeout_seconds = print_start_timeout_seconds
@@ -217,19 +227,30 @@ class PrintOrchestrator:
                 "PrusaSlicer is missing or not executable.",
             )
 
-        try:
-            if not self.quality_station.health():
+        self._wait_for_quality_station_health()
+
+        if (
+            include_printer
+            and self.camera_service is not None
+        ):
+            try:
+                if not self.camera_service.health():
+                    raise CycleExecutionError(
+                        CycleStage.PREFLIGHT,
+                        "Camera API is not healthy.",
+                    )
+
+            except CycleExecutionError:
+                raise
+
+            except Exception as error:
                 raise CycleExecutionError(
                     CycleStage.PREFLIGHT,
-                    "Quality-station API is not healthy.",
-                )
-        except CycleExecutionError:
-            raise
-        except Exception as error:
-            raise CycleExecutionError(
-                CycleStage.PREFLIGHT,
-                f"Quality-station health check failed: {error}",
-            ) from error
+                    (
+                        "Camera health check failed: "
+                        f"{error}"
+                    ),
+                ) from error
 
         try:
             with self.robot_service_factory() as robot_service:
@@ -348,6 +369,27 @@ class PrintOrchestrator:
 
                 stage = CycleStage.WAITING_FOR_PRINT
                 printer_states = self.wait_until_print_finished()
+
+                if self.camera_service is not None:
+                    stage = CycleStage.CAMERA_CAPTURE
+
+                    LOGGER.info(
+                        "Cycle %s: capturing camera image "
+                        "before handling.",
+                        cycle_id,
+                    )
+
+                    filename = (
+                        self.camera_service.capture_still(
+                            cycle_id
+                        )
+                    )
+
+                    LOGGER.info(
+                        "Cycle %s: camera image saved as %s.",
+                        cycle_id,
+                        filename,
+                    )
 
                 stage = CycleStage.COOLING
                 if self.cooling_time_seconds > 0:
@@ -661,6 +703,55 @@ class PrintOrchestrator:
             validated[parameter] = value
 
         return validated
+
+    def _wait_for_quality_station_health(
+    self,
+    *,
+    timeout_seconds: float = 300.0,
+    retry_interval_seconds: float = 10.0,
+    ) -> None:
+        """Wait for the quality-station API to become healthy."""
+        deadline = time.monotonic() + timeout_seconds
+        attempts = 0
+        last_failure = "Quality-station API reported an unhealthy state."
+        last_exception: Exception | None = None
+
+        while True:
+            attempts += 1
+
+            try:
+                if self.quality_station.health():
+                    return
+
+                last_failure = (
+                    "Quality-station API reported an unhealthy state."
+                )
+                last_exception = None
+
+            except Exception as error:
+                last_exception = error
+                last_failure = f"{type(error).__name__}: {error}"
+
+            remaining_seconds = deadline - time.monotonic()
+
+            if remaining_seconds <= 0:
+                break
+
+            time.sleep(
+                min(retry_interval_seconds, remaining_seconds)
+            )
+
+        cycle_error = CycleExecutionError(
+            CycleStage.PREFLIGHT,
+            "Quality-station did not become healthy within "
+            f"{timeout_seconds:.0f} seconds after {attempts} attempts. "
+            f"Last failure: {last_failure}",
+        )
+
+        if last_exception is not None:
+            raise cycle_error from last_exception
+
+        raise cycle_error
 
     @staticmethod
     def _sha256_file(path: Path) -> str:
