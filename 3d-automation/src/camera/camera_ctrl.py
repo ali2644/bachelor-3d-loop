@@ -1,5 +1,6 @@
 import os
 import subprocess
+import time
 
 def list_cameras():
     """List available cameras with names (using v4l2-ctl) or fallback to device paths."""
@@ -74,6 +75,8 @@ def capture_still(
             ],
             check=True
         )
+
+        time.sleep(0.7)
 
     # Capture a single frame using ffmpeg
     cmd = [
