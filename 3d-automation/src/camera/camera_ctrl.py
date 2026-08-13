@@ -48,6 +48,19 @@ def get_camera_capabilities(device_path):
         + controls.stdout
     )
 
+DEFAULT_CAMERA_CONTROLS = {
+    "auto_exposure": 1,
+    "exposure_time_absolute": 220,
+    "gain": 64,
+    "brightness": -30,
+    "contrast": 80,
+    "gamma": 300,
+    "sharpness": 80,
+    "white_balance_automatic": 0,
+    "white_balance_temperature": 3800,
+    "saturation": 30,
+    "backlight_compensation": 0,
+}
 
 def capture_still(
     device_path,
@@ -59,11 +72,15 @@ def capture_still(
 ):
     """Capture a single frame and save it as an image file."""
 
+    effective_controls = {
+        **DEFAULT_CAMERA_CONTROLS,
+        **controls,
+    }
     # Apply optional V4L2 camera controls
-    if controls:
+    if effective_controls:
         ctrl_string = ",".join(
             f"{name}={value}"
-            for name, value in controls.items()
+            for name, value in effective_controls.items()
         )
 
         subprocess.run(
@@ -103,7 +120,11 @@ def show_live(
     """Display a live video stream from the camera."""
 
     # Apply optional V4L2 camera controls
-    if controls:
+    effective_controls = {
+        **DEFAULT_CAMERA_CONTROLS,
+        **controls,
+    }
+    if effective_controls:
         ctrl_string = ",".join(
             f"{name}={value}"
             for name, value in controls.items()
