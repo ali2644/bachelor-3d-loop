@@ -205,9 +205,9 @@ class RobotService:
 
         self.grip_printed_part_securely()
 
-        with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
-            self.move_to(PRINTER_BREAK_OFF_1)
-            self.move_to(PRINTER_BREAK_OFF)
+        
+        self.move_to(PRINTER_BREAK_OFF_1)
+        self.move_to(PRINTER_BREAK_OFF)
             
         self.move_to(PRINTER_OUTSIDE)
 
