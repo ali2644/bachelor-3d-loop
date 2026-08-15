@@ -195,7 +195,7 @@ class RobotService:
         self.move_to(PRINTER_SAFE)
 
         self.open_gripper(
-            max_torque_percentage=50,
+            max_torque_percentage=90,
             hold_torque_percentage=50,
             settling_time_seconds=GRIPPER_SETTLING_TIME_SECONDS,
         )
