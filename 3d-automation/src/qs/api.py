@@ -10,6 +10,7 @@ from pathlib import Path
 from camera.camera_ctrl import capture_still
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 
 from qs.sj220_exceptions import (
     SJ220ConnectionError,
@@ -199,6 +200,53 @@ def create_camera_capture(
         "filename": output_path.name,
     }
 
+@app.get(
+    "/camera/captures/{cycle_id}",
+    response_class=FileResponse,
+)
+def download_camera_capture(
+    cycle_id: str,
+) -> FileResponse:
+    """Download an existing camera image for one cycle."""
+
+    if CAMERA_CYCLE_ID_PATTERN.fullmatch(cycle_id) is None:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_cycle_id",
+                "message": (
+                    "cycle_id must be a "
+                    "32-character lowercase UUID "
+                    "hex value."
+                ),
+            },
+        )
+
+    output_path = (
+        _camera_output_directory()
+        / f"{cycle_id}.jpg"
+    )
+
+    if (
+        not output_path.is_file()
+        or output_path.stat().st_size == 0
+    ):
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "type": "camera_capture_not_found",
+                "message": (
+                    "No camera image exists for "
+                    f"cycle {cycle_id}."
+                ),
+            },
+        )
+
+    return FileResponse(
+        path=output_path,
+        media_type="image/jpeg",
+        filename=output_path.name,
+    )
 
 @app.post("/measurements")
 def create_measurement() -> dict[str, object]:

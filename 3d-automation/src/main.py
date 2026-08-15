@@ -214,7 +214,18 @@ def build_orchestrator(
     )
     slicer_service = SlicerService(slicer_path)
     quality_station = QualityStationClient(qs_base_url)
-    camera_service = CameraClient(camera_base_url)
+    camera_service = CameraClient(
+        camera_base_url,
+        download_directory=Path(
+            os.getenv(
+                "CAMERA_DOWNLOAD_DIR",
+                str(
+                    PROJECT_DIR
+                    / "data/camera_images"
+                ),
+            )
+        ),
+    )
     cycle_recorder = CsvCycleRecorder(results_csv)
 
     return PrintOrchestrator(

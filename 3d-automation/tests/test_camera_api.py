@@ -115,6 +115,85 @@ class CameraApiTest(unittest.TestCase):
             422,
         )
 
+    def test_existing_camera_capture_can_be_downloaded(
+        self,
+    ) -> None:
+        cycle_id = "b" * 32
+        image_data = b"fake-jpeg-data"
+
+        with tempfile.TemporaryDirectory() as directory:
+            output_directory = Path(directory)
+            image_path = (
+                output_directory
+                / f"{cycle_id}.jpg"
+            )
+            image_path.write_bytes(image_data)
+
+            with patch(
+                "qs.api._camera_output_directory",
+                return_value=output_directory,
+            ):
+                response = api.download_camera_capture(
+                    cycle_id
+                )
+
+            self.assertEqual(
+                Path(response.path),
+                image_path,
+            )
+            self.assertEqual(
+                response.media_type,
+                "image/jpeg",
+            )
+            self.assertEqual(
+                Path(response.path).read_bytes(),
+                image_data,
+            )
+
+    def test_missing_camera_capture_returns_404(
+        self,
+    ) -> None:
+        cycle_id = "c" * 32
+
+        with tempfile.TemporaryDirectory() as directory:
+            with (
+                patch(
+                    "qs.api._camera_output_directory",
+                    return_value=Path(directory),
+                ),
+                self.assertRaises(
+                    HTTPException
+                ) as context,
+            ):
+                api.download_camera_capture(cycle_id)
+
+        self.assertEqual(
+            context.exception.status_code,
+            404,
+        )
+        self.assertEqual(
+            context.exception.detail["type"],
+            "camera_capture_not_found",
+        )
+
+    def test_invalid_download_cycle_id_is_rejected(
+        self,
+    ) -> None:
+        with self.assertRaises(
+            HTTPException
+        ) as context:
+            api.download_camera_capture(
+                "../invalid"
+            )
+
+        self.assertEqual(
+            context.exception.status_code,
+            422,
+        )
+        self.assertEqual(
+            context.exception.detail["type"],
+            "invalid_cycle_id",
+        )
 
 if __name__ == "__main__":
     unittest.main()
