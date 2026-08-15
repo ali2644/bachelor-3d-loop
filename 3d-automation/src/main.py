@@ -129,7 +129,7 @@ def parse_arguments(
         "--print-speed",
         type=float,
         help=(
-            "Top solid infill speed in mm/s (50-160). "
+            "Top solid infill speed in mm/s (50-120). "
             "Defaults to the base profile."
         ),
     )
@@ -137,7 +137,7 @@ def parse_arguments(
         "--extrusion-width",
         type=float,
         help=(
-            "Top infill extrusion width in mm (0.35-0.50). "
+            "Top infill extrusion width in mm (0.38-0.50). "
             "Defaults to the base profile."
         ),
     )

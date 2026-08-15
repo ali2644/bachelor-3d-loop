@@ -129,12 +129,12 @@ class PrintParameters:
             "print_speed",
             self.print_speed,
             50,
-            160,
+            120,
         )
         self._validate_float(
             "extrusion_width",
             self.extrusion_width,
-            0.35,
+            0.38,
             0.50,
         )
         self._validate_float(
