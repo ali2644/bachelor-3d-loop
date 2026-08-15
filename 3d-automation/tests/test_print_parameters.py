@@ -13,7 +13,7 @@ from printer.print_parameters import (
 BASE_PROFILE = """\
 # unchanged full profile
 top_solid_layers = 4
-top_solid_infill_speed = 125
+top_solid_infill_speed = 115
 top_infill_extrusion_width = 0.40
 extrusion_multiplier = 1.00
 temperature = 210
@@ -47,7 +47,7 @@ class PrintParametersTest(unittest.TestCase):
             parameters,
             PrintParameters(
                 top_solid_layers=4,
-                print_speed=125,
+                print_speed=115,
                 extrusion_width=0.40,
                 extrusion_multiplier=1.00,
                 temperature=210,
@@ -62,7 +62,7 @@ class PrintParametersTest(unittest.TestCase):
         ):
             PrintParameters(
                 top_solid_layers=6,
-                print_speed=125,
+                print_speed=115,
                 extrusion_width=0.40,
                 extrusion_multiplier=1.00,
                 temperature=210,
@@ -75,7 +75,7 @@ class PrintParametersTest(unittest.TestCase):
                 "top_solid_layers = 4",
                 "top_solid_layers = 7",
             ).replace(
-                "top_solid_infill_speed = 125",
+                "top_solid_infill_speed = 115",
                 "top_solid_infill_speed = 40",
             ),
             encoding="utf-8",
@@ -84,19 +84,19 @@ class PrintParametersTest(unittest.TestCase):
         parameters = PrintParameters.from_profile(
             self.base_profile,
             top_solid_layers=4,
-            print_speed=125,
+            print_speed=115,
         )
 
         self.assertEqual(parameters.top_solid_layers, 4)
-        self.assertEqual(parameters.print_speed, 125)
+        self.assertEqual(parameters.print_speed, 115)
         self.assertEqual(parameters.extrusion_width, 0.40)
         self.assertEqual(parameters.temperature, 210)
 
     def test_generated_profile_changes_only_controlled_settings(self) -> None:
         parameters = PrintParameters(
             top_solid_layers=2,
-            print_speed=160,
-            extrusion_width=0.35,
+            print_speed=120,
+            extrusion_width=0.38,
             extrusion_multiplier=0.90,
             temperature=195,
             fan_speed=25,
@@ -113,8 +113,8 @@ class PrintParametersTest(unittest.TestCase):
         original = self.base_profile.read_text(encoding="utf-8")
 
         self.assertIn("top_solid_layers = 2\n", generated)
-        self.assertIn("top_solid_infill_speed = 160\n", generated)
-        self.assertIn("top_infill_extrusion_width = 0.35\n", generated)
+        self.assertIn("top_solid_infill_speed = 120\n", generated)
+        self.assertIn("top_infill_extrusion_width = 0.38\n", generated)
         self.assertIn("extrusion_multiplier = 0.9\n", generated)
         self.assertIn("temperature = 195\n", generated)
         self.assertIn("min_fan_speed = 25\n", generated)

@@ -98,7 +98,7 @@ class ExperimentRunnerTest(unittest.TestCase):
     def test_prepares_and_runs_one_unique_request_per_plan_entry(self) -> None:
         runner, orchestrator, profile_generator = self.create_runner()
         plan = (
-            plan_entry(2, print_speed=150),
+            plan_entry(2, print_speed=120),
             plan_entry(1, print_speed=75),
         )
 
@@ -123,7 +123,7 @@ class ExperimentRunnerTest(unittest.TestCase):
                 request.print_parameters["print_speed"]
                 for request in orchestrator.requests
             ],
-            ["75", "150"],
+            ["75", "120"],
         )
         self.assertEqual(
             [call[2] for call in profile_generator.calls],

@@ -25,8 +25,8 @@ def valid_rows() -> list[dict[str, object]]:
         {
             "cycle_number": cycle_number,
             "top_solid_layers": 2 + (cycle_number - 1) % 4,
-            "print_speed": 50 + 5 * (cycle_number - 1),
-            "extrusion_width": 0.35 + 0.007 * (cycle_number - 1),
+            "print_speed": round(50 + (120 - 50) * (cycle_number - 1) / 19),
+            "extrusion_width": round(0.38 + (0.50 - 0.38) * (cycle_number - 1) / 19,3,),
             "extrusion_multiplier": 0.90 + 0.01 * (cycle_number - 1),
             "temperature": 195 + 2 * (cycle_number - 1),
             "fan_speed": 5 * (cycle_number - 1),
@@ -76,7 +76,7 @@ class ExperimentPlanTest(unittest.TestCase):
             PrintParameters(
                 top_solid_layers=2,
                 print_speed=50,
-                extrusion_width=0.35,
+                extrusion_width=0.38,
                 extrusion_multiplier=0.90,
                 temperature=195,
                 fan_speed=0,
