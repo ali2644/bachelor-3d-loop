@@ -29,9 +29,9 @@ LOGGER = logging.getLogger(__name__)
 PROJECT_DIR = Path(__file__).resolve().parents[1]
 EXPERIMENT_PLAN_PATH = (
     PROJECT_DIR
-    / "config/experiment_plans/experiment_plan_20.csv"
+    / "config/experiment_plans/experiment_plan_100.csv"
 )
-MAX_EXPERIMENT_CYCLES = 20
+MAX_EXPERIMENT_CYCLES = 100
 
 
 def experiment_cycle_count(raw_value: str) -> int:
@@ -112,24 +112,34 @@ def parse_arguments(
         "--experiment-plan",
         type=Path,
         default=EXPERIMENT_PLAN_PATH,
-        help="CSV file containing the 20 validated parameter sets.",
+        help="CSV file containing the 100 validated parameter sets.",
     )
     parser.add_argument(
         "--experiment-cycles",
         type=experiment_cycle_count,
         default=2,
         help=(
-            "Number of plan entries to run (1-20). Defaults to 2 for "
+            "Last plan entry to run (1-100). Defaults to 2 for "
             "the first consecutive-cycle hardware test."
+        ),
+    )
+    parser.add_argument(
+        "--experiment-start-cycle",
+        type=experiment_cycle_count,
+        default=1,
+        help=(
+            "First plan entry to run (1-100). Defaults to 1. "
+            "Use this together with --reuse-experiment-plan when "
+            "continuing an interrupted experiment."
         ),
     )
     parser.add_argument(
         "--reuse-experiment-plan",
         action="store_true",
         help=(
-            "Reuse the existing experiment CSV instead of generating a "
-            "new 20-entry plan. Use this when an interrupted hardware "
-            "run must keep the same parameter plan."
+            "Reuse the existing 100-entry experiment CSV instead of "
+            "generating a new plan. Use this when an interrupted "
+            "hardware run must keep the same parameter plan."
         ),
     )
     parser.add_argument(
@@ -329,12 +339,26 @@ def run_experiment(
             f"overrides: {', '.join(supplied_overrides)}."
         )
 
+    start_cycle = arguments.experiment_start_cycle
+    end_cycle = arguments.experiment_cycles
+
+    if start_cycle > end_cycle:
+        raise ValueError(
+            "--experiment-start-cycle must not be greater than "
+            "--experiment-cycles."
+        )
+
     experiment_plan_path = arguments.experiment_plan.resolve()
     if arguments.reuse_experiment_plan:
         if arguments.experiment_plan_seed is not None:
             raise ValueError(
                 "--experiment-plan-seed cannot be combined with "
                 "--reuse-experiment-plan."
+            )
+        if not experiment_plan_path.is_file():
+            raise ValueError(
+                "Cannot reuse missing experiment plan: "
+                f"{experiment_plan_path}"
             )
         LOGGER.info(
             "Reusing existing experiment plan %s.",
@@ -343,6 +367,7 @@ def run_experiment(
     else:
         generated_plan = generate_experiment_plan(
             experiment_plan_path,
+            sample_count=MAX_EXPERIMENT_CYCLES,
             seed=arguments.experiment_plan_seed,
         )
         LOGGER.info(
@@ -354,12 +379,18 @@ def run_experiment(
         )
 
     complete_plan = load_experiment_plan(
-        experiment_plan_path
+        experiment_plan_path,
+        expected_cycle_count=MAX_EXPERIMENT_CYCLES,
     )
-    selected_plan = complete_plan[: arguments.experiment_cycles]
+
+    selected_plan = complete_plan[start_cycle - 1:end_cycle]
+
     LOGGER.info(
-        "Loaded %s valid plan entries; running the first %s.",
+        "Loaded %s valid plan entries; running entries %s through %s "
+        "(%s cycles).",
         len(complete_plan),
+        start_cycle,
+        end_cycle,
         len(selected_plan),
     )
 

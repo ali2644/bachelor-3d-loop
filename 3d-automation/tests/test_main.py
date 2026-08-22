@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import io
 import json
+import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import main as main_module
@@ -22,14 +24,21 @@ class MainTest(unittest.TestCase):
         arguments = main_module.parse_arguments(["--mode", "experiment"])
 
         self.assertEqual(arguments.mode, "experiment")
+        self.assertEqual(arguments.experiment_start_cycle, 1)
         self.assertEqual(arguments.experiment_cycles, 2)
         self.assertEqual(
             arguments.experiment_plan,
             main_module.EXPERIMENT_PLAN_PATH,
         )
+        self.assertEqual(
+            arguments.experiment_plan.name,
+            "experiment_plan_100.csv",
+        )
 
-    def test_rejects_experiment_cycle_count_outside_one_to_twenty(self) -> None:
-        for invalid_value in ("0", "21", "not-a-number"):
+    def test_rejects_experiment_cycle_count_outside_one_to_hundred(
+        self,
+    ) -> None:
+        for invalid_value in ("0", "101", "not-a-number"):
             with self.subTest(invalid_value=invalid_value):
                 with redirect_stderr(io.StringIO()):
                     with self.assertRaises(SystemExit):
@@ -38,6 +47,22 @@ class MainTest(unittest.TestCase):
                                 "--mode",
                                 "experiment",
                                 "--experiment-cycles",
+                                invalid_value,
+                            ]
+                        )
+
+    def test_rejects_experiment_start_cycle_outside_one_to_hundred(
+        self,
+    ) -> None:
+        for invalid_value in ("0", "101", "not-a-number"):
+            with self.subTest(invalid_value=invalid_value):
+                with redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        main_module.parse_arguments(
+                            [
+                                "--mode",
+                                "experiment",
+                                "--experiment-start-cycle",
                                 invalid_value,
                             ]
                         )
@@ -55,32 +80,42 @@ class MainTest(unittest.TestCase):
         profile_generator_class: Mock,
         runner_class: Mock,
     ) -> None:
-        entries = tuple(object() for _ in range(20))
+        entries = tuple(object() for _ in range(100))
         load_experiment_plan.return_value = entries
+
         expected_results = (
             FakeResult("cycle-1"),
             FakeResult("cycle-2"),
         )
         runner_class.return_value.run.return_value = expected_results
+
         arguments = main_module.parse_arguments(
-            ["--mode", "experiment", "--experiment-cycles", "2"]
+            [
+                "--mode",
+                "experiment",
+                "--experiment-cycles",
+                "2",
+            ]
         )
 
         generate_experiment_plan.return_value = Mock(
-        path=arguments.experiment_plan.resolve(),
-        archive_path=arguments.experiment_plan.resolve(),
-        seed=12345,
-    )
+            path=arguments.experiment_plan.resolve(),
+            archive_path=arguments.experiment_plan.resolve(),
+            seed=12345,
+        )
 
         results = main_module.run_experiment(arguments)
 
         self.assertEqual(results, expected_results)
+
         generate_experiment_plan.assert_called_once_with(
-        arguments.experiment_plan.resolve(),
-        seed=None,
+            arguments.experiment_plan.resolve(),
+            sample_count=main_module.MAX_EXPERIMENT_CYCLES,
+            seed=None,
         )
         load_experiment_plan.assert_called_once_with(
-            arguments.experiment_plan.resolve()
+            arguments.experiment_plan.resolve(),
+            expected_cycle_count=main_module.MAX_EXPERIMENT_CYCLES,
         )
         build_orchestrator.assert_called_once_with(
             arguments.results_csv.resolve()
@@ -90,6 +125,80 @@ class MainTest(unittest.TestCase):
             stl_path=arguments.stl.resolve(),
             base_profile_path=arguments.profile.resolve(),
         )
+
+    @patch("main.ExperimentRunner")
+    @patch("main.SlicerProfileGenerator")
+    @patch("main.build_orchestrator")
+    @patch("main.load_experiment_plan")
+    @patch("main.generate_experiment_plan")
+    def test_run_experiment_can_resume_from_requested_cycle(
+        self,
+        generate_experiment_plan: Mock,
+        load_experiment_plan: Mock,
+        build_orchestrator: Mock,
+        profile_generator_class: Mock,
+        runner_class: Mock,
+    ) -> None:
+        entries = tuple(object() for _ in range(100))
+        load_experiment_plan.return_value = entries
+        runner_class.return_value.run.return_value = ()
+
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            experiment_plan = (
+                Path(temporary_directory) / "experiment_plan_100.csv"
+            )
+            experiment_plan.touch()
+
+            arguments = main_module.parse_arguments(
+                [
+                    "--mode",
+                    "experiment",
+                    "--experiment-plan",
+                    str(experiment_plan),
+                    "--experiment-start-cycle",
+                    "49",
+                    "--experiment-cycles",
+                    "100",
+                    "--reuse-experiment-plan",
+                ]
+            )
+
+            results = main_module.run_experiment(arguments)
+
+        self.assertEqual(results, ())
+        generate_experiment_plan.assert_not_called()
+
+        load_experiment_plan.assert_called_once_with(
+            experiment_plan.resolve(),
+            expected_cycle_count=main_module.MAX_EXPERIMENT_CYCLES,
+        )
+        build_orchestrator.assert_called_once_with(
+            arguments.results_csv.resolve()
+        )
+        runner_class.return_value.run.assert_called_once_with(
+            entries[48:100],
+            stl_path=arguments.stl.resolve(),
+            base_profile_path=arguments.profile.resolve(),
+        )
+
+    def test_experiment_rejects_start_cycle_after_end_cycle(self) -> None:
+        arguments = main_module.parse_arguments(
+            [
+                "--mode",
+                "experiment",
+                "--experiment-start-cycle",
+                "10",
+                "--experiment-cycles",
+                "9",
+                "--reuse-experiment-plan",
+            ]
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "must not be greater",
+        ):
+            main_module.run_experiment(arguments)
 
     @patch("main.build_orchestrator")
     @patch("main.load_experiment_plan")
@@ -155,7 +264,12 @@ class MainTest(unittest.TestCase):
         output = io.StringIO()
         with redirect_stdout(output):
             exit_code = main_module.main(
-                ["--mode", "experiment", "--experiment-cycles", "2"]
+                [
+                    "--mode",
+                    "experiment",
+                    "--experiment-cycles",
+                    "2",
+                ]
             )
 
         self.assertEqual(exit_code, 0)
