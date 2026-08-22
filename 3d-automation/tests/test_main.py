@@ -46,8 +46,10 @@ class MainTest(unittest.TestCase):
     @patch("main.SlicerProfileGenerator")
     @patch("main.build_orchestrator")
     @patch("main.load_experiment_plan")
+    @patch("main.generate_experiment_plan")
     def test_run_experiment_passes_only_requested_plan_entries(
         self,
+        generate_experiment_plan: Mock,
         load_experiment_plan: Mock,
         build_orchestrator: Mock,
         profile_generator_class: Mock,
@@ -64,9 +66,19 @@ class MainTest(unittest.TestCase):
             ["--mode", "experiment", "--experiment-cycles", "2"]
         )
 
+        generate_experiment_plan.return_value = Mock(
+        path=arguments.experiment_plan.resolve(),
+        archive_path=arguments.experiment_plan.resolve(),
+        seed=12345,
+    )
+
         results = main_module.run_experiment(arguments)
 
         self.assertEqual(results, expected_results)
+        generate_experiment_plan.assert_called_once_with(
+        arguments.experiment_plan.resolve(),
+        seed=None,
+        )
         load_experiment_plan.assert_called_once_with(
             arguments.experiment_plan.resolve()
         )

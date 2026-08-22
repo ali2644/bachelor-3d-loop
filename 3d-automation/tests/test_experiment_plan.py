@@ -24,12 +24,26 @@ def valid_rows() -> list[dict[str, object]]:
     return [
         {
             "cycle_number": cycle_number,
-            "top_solid_layers": 2 + (cycle_number - 1) % 4,
-            "print_speed": round(50 + (120 - 50) * (cycle_number - 1) / 19),
-            "extrusion_width": round(0.38 + (0.50 - 0.38) * (cycle_number - 1) / 19,3,),
-            "extrusion_multiplier": 0.90 + 0.01 * (cycle_number - 1),
-            "temperature": 195 + 2 * (cycle_number - 1),
-            "fan_speed": 5 * (cycle_number - 1),
+            "top_solid_layers": 5,
+            "print_speed": round(
+                50 + (90 - 50) * (cycle_number - 1) / 19
+            ),
+            "extrusion_width": round(
+                0.38
+                + (0.50 - 0.38) * (cycle_number - 1) / 19,
+                3,
+            ),
+            "extrusion_multiplier": round(
+                1.05
+                + (1.20 - 1.05) * (cycle_number - 1) / 19,
+                3,
+            ),
+            "temperature": round(
+                215 + (235 - 215) * (cycle_number - 1) / 19
+            ),
+            "fan_speed": round(
+                30 + (80 - 30) * (cycle_number - 1) / 19
+            ),
         }
         for cycle_number in range(1, 21)
     ]
@@ -74,12 +88,12 @@ class ExperimentPlanTest(unittest.TestCase):
         self.assertEqual(
             plan[0].parameters,
             PrintParameters(
-                top_solid_layers=2,
+                top_solid_layers=5,
                 print_speed=50,
                 extrusion_width=0.38,
-                extrusion_multiplier=0.90,
-                temperature=195,
-                fan_speed=0,
+                extrusion_multiplier=1.05,
+                temperature=215,
+                fan_speed=30,
             ),
         )
 
@@ -101,7 +115,7 @@ class ExperimentPlanTest(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            r"row 6: temperature must be between 195 and 235",
+            r"row 6: temperature must be between 215 and 235",
         ):
             load_experiment_plan(self.plan_path)
 

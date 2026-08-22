@@ -18,11 +18,11 @@ def plan_entry(
     return ExperimentPlanEntry(
         cycle_number=cycle_number,
         parameters=PrintParameters(
-            top_solid_layers=2 + (cycle_number - 1) % 4,
+            top_solid_layers=5,
             print_speed=print_speed,
             extrusion_width=0.40,
-            extrusion_multiplier=1.00,
-            temperature=210,
+            extrusion_multiplier=1.05,
+            temperature=215,
             fan_speed=80,
         ),
     )
@@ -98,7 +98,7 @@ class ExperimentRunnerTest(unittest.TestCase):
     def test_prepares_and_runs_one_unique_request_per_plan_entry(self) -> None:
         runner, orchestrator, profile_generator = self.create_runner()
         plan = (
-            plan_entry(2, print_speed=120),
+            plan_entry(2, print_speed=90),
             plan_entry(1, print_speed=75),
         )
 
@@ -123,7 +123,7 @@ class ExperimentRunnerTest(unittest.TestCase):
                 request.print_parameters["print_speed"]
                 for request in orchestrator.requests
             ],
-            ["75", "120"],
+            ["75", "90"],
         )
         self.assertEqual(
             [call[2] for call in profile_generator.calls],

@@ -1,8 +1,13 @@
 from __future__ import annotations
 
 import csv
+import random
+import secrets
+import shutil
+import uuid
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 from printer.print_parameters import PrintParameters
@@ -19,6 +24,16 @@ EXPECTED_FIELD_NAMES = (
 )
 DEFAULT_EXPECTED_CYCLE_COUNT = 20
 
+# Narrowed warm-start limits chosen after the first hardware trials.
+GENERATED_TOP_SOLID_LAYERS = 5
+GENERATED_PARAMETER_BOUNDS = {
+    "print_speed": (50.0, 90.0),
+    "extrusion_width": (0.38, 0.50),
+    "extrusion_multiplier": (1.05, 1.20),
+    "temperature": (215.0, 235.0),
+    "fan_speed": (30.0, 80.0),
+}
+
 
 @dataclass(frozen=True)
 class ExperimentPlanEntry:
@@ -26,6 +41,155 @@ class ExperimentPlanEntry:
 
     cycle_number: int
     parameters: PrintParameters
+
+
+@dataclass(frozen=True)
+class GeneratedExperimentPlan:
+    """Paths and seed of one newly generated experiment plan."""
+
+    path: Path
+    archive_path: Path
+    seed: int
+
+
+def _latin_hypercube_column(
+    sample_count: int,
+    random_generator: random.Random,
+) -> list[float]:
+    """Return one independently shuffled Latin-hypercube column."""
+    values = [
+        (stratum + random_generator.random()) / sample_count
+        for stratum in range(sample_count)
+    ]
+    random_generator.shuffle(values)
+    return values
+
+
+def _scale(unit_value: float, lower: float, upper: float) -> float:
+    return lower + unit_value * (upper - lower)
+
+
+def _generate_entries(
+    sample_count: int,
+    seed: int,
+) -> tuple[ExperimentPlanEntry, ...]:
+    random_generator = random.Random(seed)
+    columns = {
+        name: _latin_hypercube_column(sample_count, random_generator)
+        for name in GENERATED_PARAMETER_BOUNDS
+    }
+
+    entries: list[ExperimentPlanEntry] = []
+    for index in range(sample_count):
+        scaled = {
+            name: _scale(
+                columns[name][index],
+                bounds[0],
+                bounds[1],
+            )
+            for name, bounds in GENERATED_PARAMETER_BOUNDS.items()
+        }
+        entries.append(
+            ExperimentPlanEntry(
+                cycle_number=index + 1,
+                parameters=PrintParameters(
+                    top_solid_layers=GENERATED_TOP_SOLID_LAYERS,
+                    print_speed=int(round(scaled["print_speed"])),
+                    extrusion_width=round(
+                        scaled["extrusion_width"],
+                        3,
+                    ),
+                    extrusion_multiplier=round(
+                        scaled["extrusion_multiplier"],
+                        3,
+                    ),
+                    temperature=int(round(scaled["temperature"])),
+                    fan_speed=int(round(scaled["fan_speed"])),
+                ),
+            )
+        )
+
+    _validate_unique_parameter_sets(entries)
+    return tuple(entries)
+
+
+def _write_experiment_plan(
+    path: Path,
+    entries: tuple[ExperimentPlanEntry, ...],
+) -> None:
+    with path.open(
+        "w",
+        encoding="utf-8",
+        newline="",
+    ) as stream:
+        writer = csv.DictWriter(
+            stream,
+            fieldnames=EXPECTED_FIELD_NAMES,
+        )
+        writer.writeheader()
+        for entry in entries:
+            writer.writerow(
+                {
+                    "cycle_number": entry.cycle_number,
+                    **entry.parameters.as_record(),
+                }
+            )
+
+
+def generate_experiment_plan(
+    csv_path: str | Path,
+    *,
+    sample_count: int = DEFAULT_EXPECTED_CYCLE_COUNT,
+    seed: int | None = None,
+) -> GeneratedExperimentPlan:
+    """
+    Generate, archive and atomically activate one Latin-hypercube plan.
+
+    The returned seed and archived CSV make every automatically generated
+    plan reproducible. Supplying the same seed produces the same rows.
+    """
+    if sample_count < 1:
+        raise ValueError("sample_count must be at least 1.")
+    if isinstance(seed, bool) or (seed is not None and not isinstance(seed, int)):
+        raise ValueError("seed must be an integer or None.")
+
+    resolved_seed = secrets.randbits(63) if seed is None else seed
+    entries = _generate_entries(sample_count, resolved_seed)
+
+    path = Path(csv_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    archive_directory = path.parent / "archive"
+    archive_directory.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    unique_suffix = uuid.uuid4().hex[:8]
+
+    if path.is_file():
+        previous_archive_path = archive_directory / (
+            f"{path.stem}_{timestamp}_replaced_{unique_suffix}{path.suffix}"
+        )
+        shutil.copy2(path, previous_archive_path)
+
+    archive_path = archive_directory / (
+        f"{path.stem}_{timestamp}_seed-{resolved_seed}_"
+        f"{unique_suffix}{path.suffix}"
+    )
+    _write_experiment_plan(archive_path, entries)
+
+    temporary_path = path.with_name(
+        f".{path.name}.{uuid.uuid4().hex}.tmp"
+    )
+    try:
+        shutil.copyfile(archive_path, temporary_path)
+        temporary_path.replace(path)
+    finally:
+        temporary_path.unlink(missing_ok=True)
+
+    return GeneratedExperimentPlan(
+        path=path,
+        archive_path=archive_path,
+        seed=resolved_seed,
+    )
 
 
 def _parse_int(

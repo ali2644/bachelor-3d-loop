@@ -16,10 +16,12 @@ PROFILE_PARAMETER_KEYS = (
     "temperature",
     "max_fan_speed",
 )
+FIXED_TOP_SOLID_LAYERS = 5
 
 # These are constant experimental conditions, not optimization variables.
 # They make sure the six logical parameters have the intended effect.
 FIXED_PROFILE_OVERRIDES = {
+    "top_solid_layers": str(FIXED_TOP_SOLID_LAYERS),
     "skirts": "0",
     "brim_width": "0",
     "top_solid_min_thickness": "0",
@@ -119,17 +121,17 @@ class PrintParameters:
     fan_speed: int
 
     def __post_init__(self) -> None:
-        self._validate_int(
-            "top_solid_layers",
-            self.top_solid_layers,
-            2,
-            5,
-        )
+        if self.top_solid_layers != FIXED_TOP_SOLID_LAYERS:
+            raise ValueError(
+                "top_solid_layers is fixed at "
+                f"{FIXED_TOP_SOLID_LAYERS}, got "
+                f"{self.top_solid_layers}."
+            )
         self._validate_float(
             "print_speed",
             self.print_speed,
             50,
-            120,
+            90,
         )
         self._validate_float(
             "extrusion_width",
@@ -140,20 +142,20 @@ class PrintParameters:
         self._validate_float(
             "extrusion_multiplier",
             self.extrusion_multiplier,
-            0.90,
+            1.05,
             1.20,
         )
         self._validate_int(
             "temperature",
             self.temperature,
-            195,
+            215,
             235,
         )
         self._validate_int(
             "fan_speed",
             self.fan_speed,
-            0,
-            100,
+            30,
+            80,
         )
 
     @classmethod

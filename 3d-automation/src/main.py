@@ -8,7 +8,10 @@ from functools import partial
 from pathlib import Path
 from typing import Sequence
 
-from experiments.experiment_plan import load_experiment_plan
+from experiments.experiment_plan import (
+    generate_experiment_plan,
+    load_experiment_plan,
+)
 from experiments.experiment_runner import ExperimentRunner
 from orchestrator import (
     CycleExecutionError,
@@ -121,15 +124,32 @@ def parse_arguments(
         ),
     )
     parser.add_argument(
+        "--reuse-experiment-plan",
+        action="store_true",
+        help=(
+            "Reuse the existing experiment CSV instead of generating a "
+            "new 20-entry plan. Use this when an interrupted hardware "
+            "run must keep the same parameter plan."
+        ),
+    )
+    parser.add_argument(
+        "--experiment-plan-seed",
+        type=int,
+        help=(
+            "Optional seed for reproducible automatic experiment-plan "
+            "generation."
+        ),
+    )
+    parser.add_argument(
         "--top-solid-layers",
         type=int,
-        help="Top solid layers (2-5). Defaults to the base profile.",
+        help="Top solid layers are currently fixed at 5.",
     )
     parser.add_argument(
         "--print-speed",
         type=float,
         help=(
-            "Top solid infill speed in mm/s (50-120). "
+            "Top solid infill speed in mm/s (50-90). "
             "Defaults to the base profile."
         ),
     )
@@ -145,7 +165,7 @@ def parse_arguments(
         "--extrusion-multiplier",
         type=float,
         help=(
-            "Extrusion multiplier (0.90-1.20). "
+            "Extrusion multiplier (1.05-1.20). "
             "Defaults to the base profile."
         ),
     )
@@ -153,7 +173,7 @@ def parse_arguments(
         "--temperature",
         type=int,
         help=(
-            "PLA print temperature in degrees Celsius (195-235). "
+            "PLA print temperature in degrees Celsius (215-235). "
             "Defaults to the base profile."
         ),
     )
@@ -161,7 +181,7 @@ def parse_arguments(
         "--fan-speed",
         type=int,
         help=(
-            "Fixed part-cooling fan speed in percent (0-100). "
+            "Fixed part-cooling fan speed in percent (30-80). "
             "Defaults to max_fan_speed from the base profile."
         ),
     )
@@ -309,8 +329,32 @@ def run_experiment(
             f"overrides: {', '.join(supplied_overrides)}."
         )
 
+    experiment_plan_path = arguments.experiment_plan.resolve()
+    if arguments.reuse_experiment_plan:
+        if arguments.experiment_plan_seed is not None:
+            raise ValueError(
+                "--experiment-plan-seed cannot be combined with "
+                "--reuse-experiment-plan."
+            )
+        LOGGER.info(
+            "Reusing existing experiment plan %s.",
+            experiment_plan_path,
+        )
+    else:
+        generated_plan = generate_experiment_plan(
+            experiment_plan_path,
+            seed=arguments.experiment_plan_seed,
+        )
+        LOGGER.info(
+            "Generated new experiment plan %s with seed %s; archived "
+            "copy: %s.",
+            generated_plan.path,
+            generated_plan.seed,
+            generated_plan.archive_path,
+        )
+
     complete_plan = load_experiment_plan(
-        arguments.experiment_plan.resolve()
+        experiment_plan_path
     )
     selected_plan = complete_plan[: arguments.experiment_cycles]
     LOGGER.info(
