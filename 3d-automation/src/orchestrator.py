@@ -123,6 +123,7 @@ class CycleResult:
     print_parameters: Mapping[str, str]
     measurements: Mapping[str, float] = field(default_factory=dict)
     printer_states: tuple[str, ...] = ()
+    camera_image_path: str | None = None
     error: str | None = None
 
     def as_dict(self) -> dict[str, object]:
@@ -141,6 +142,7 @@ class CycleResult:
             "print_parameters": dict(self.print_parameters),
             "measurements": dict(self.measurements),
             "printer_states": list(self.printer_states),
+            "camera_image_path": self.camera_image_path,
             "error": self.error,
         }
 
@@ -322,6 +324,7 @@ class PrintOrchestrator:
         printer_states: tuple[str, ...] = ()
         measurements: dict[str, float] = {}
         measurement_error: str | None = None
+        camera_image_path: str | None = None
 
         LOGGER.info(
             "Starting %s cycle %s.",
@@ -385,10 +388,19 @@ class PrintOrchestrator:
                         )
                     )
 
+                    image_file = (
+                        Path(__file__).resolve().parents[1]
+                        / "data"
+                        / "camera_images"
+                        / filename
+                    )
+
+                    camera_image_path = image_file.as_uri()
+
                     LOGGER.info(
                         "Cycle %s: camera image saved as %s.",
                         cycle_id,
-                        filename,
+                        camera_image_path,
                     )
 
                 stage = CycleStage.COOLING
@@ -511,6 +523,7 @@ class PrintOrchestrator:
                 print_parameters=dict(request.print_parameters),
                 measurements=measurements,
                 printer_states=printer_states,
+                camera_image_path=camera_image_path,
                 error=measurement_error,
             )
 
@@ -556,6 +569,7 @@ class PrintOrchestrator:
                 print_parameters=dict(request.print_parameters),
                 measurements=measurements,
                 printer_states=printer_states,
+                camera_image_path=camera_image_path,
                 error=str(failure),
             )
 

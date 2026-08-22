@@ -64,6 +64,7 @@ class CsvCycleRecorder:
         "profile_path",
         "profile_sha256",
         "gcode_path",
+        "camera_image_path",
         "Ra_um",
         "Rz_um",
         "printer_states",
@@ -112,6 +113,7 @@ class CsvCycleRecorder:
             "profile_path": str(result.profile_path),
             "profile_sha256": result.profile_sha256,
             "gcode_path": str(result.gcode_path),
+            "camera_image_path": result.camera_image_path or "",
             "Ra_um": result.measurements.get("Ra", ""),
             "Rz_um": result.measurements.get("Rz", ""),
             "printer_states": " -> ".join(result.printer_states),
@@ -131,6 +133,7 @@ class CsvCycleRecorder:
             writer = csv.DictWriter(
                 stream,
                 fieldnames=self.field_names,
+                quoting=csv.QUOTE_ALL,
             )
             if not file_has_content:
                 writer.writeheader()
