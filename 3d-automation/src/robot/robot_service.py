@@ -210,8 +210,7 @@ class RobotService:
             settling_time_seconds=GRIPPER_SETTLING_TIME_SECONDS,
         )
 
-        with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
-            self.move_to(PRINTER_PICK)
+        self.move_to(PRINTER_PICK)
 
         self.grip_printed_part_securely()
 
