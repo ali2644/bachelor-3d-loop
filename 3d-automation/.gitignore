@@ -5,3 +5,7 @@ config/end_to_end.env
 data/results/
 data/generated_profiles/
 data/gcode/cycle_*.gcode
+
+# Generated experiment artifacts
+config/experiment_plans/archive/
+data/camera_images/
