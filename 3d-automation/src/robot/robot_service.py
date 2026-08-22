@@ -25,7 +25,10 @@ from robot.robot_positions import (
     QS_PART_SHIFT_END,
     QS_PART_RELEASE,
     QS_PART_UNDER_PROBE,
+    QS_RECOVERY,
+    QS_RECOVERY_CLEAR_PART,
     QS_SAFE,
+    QS_SAFE_RECOVERY,
     TRANSFER_CLEARANCE,
     RobotPosition,
 )
@@ -51,6 +54,13 @@ FINAL_GRIP_HOLD_TORQUE_PERCENT = 75
 FINAL_GRIP_SETTLING_TIME_SECONDS = 0.5
 
 LOGGER = logging.getLogger(__name__)
+
+RECOVERY_ARM_SPEED_PERCENT = 10
+
+EXPECTED_FINAL_PUSH_FAILURE_FRAGMENTS = (
+    "collision",
+    "motor not able to follow",
+)
 
 
 class RobotService:
@@ -246,19 +256,75 @@ class RobotService:
 
         LOGGER.info("First quality-station alignment completed.")
 
-    def push_part_into_measurement_fixture(self) -> None:
-        """Push the aligned part into its final horizontal position."""
+    @staticmethod
+    def _is_expected_final_push_failure(error: Exception) -> bool:
+        message = str(error).lower()
+        return any(
+            fragment in message
+            for fragment in EXPECTED_FINAL_PUSH_FAILURE_FRAGMENTS
+        )
+
+    def recover_after_final_push_collision(self) -> None:
+        """Clear the failed part after the push movement was aborted."""
+        LOGGER.warning(
+            "Starting QS recovery after the aborted final push."
+        )
+
+        with self.use_arm_speed(RECOVERY_ARM_SPEED_PERCENT):
+            # The failed target movement stopped somewhere between CONTACT
+            # and TARGET. First retreat on the same taught path.
+            self.move_to(QS_FINAL_PUSH_CONTACT)
+            self.move_to(QS_SAFE)
+            self.move_to(QS_SAFE_RECOVERY)
+            self.move_to(QS_RECOVERY)
+            self.move_to(QS_FINAL_PUSH_CONTACT)
+            self.move_to(QS_RECOVERY_CLEAR_PART)
+            self.move_to(QS_SAFE)
+
+        self.move_to(HOME)
+
+        LOGGER.warning(
+            "Final-push recovery completed; robot returned to HOME."
+        )
+
+    def push_part_into_measurement_fixture(self) -> bool:
+        """
+        Push the aligned part into its final horizontal position.
+
+        Return False after a collision or trajectory-tracking error was
+        handled by the complete recovery sequence.
+        """
         LOGGER.info("Starting final product push.")
 
         self.move_to(QS_FINAL_PUSH_CONTACT)
 
+        try:
+            with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
+                self.move_to(QS_FINAL_PUSH_TARGET)
+
+        except NiryoRobotException as error:
+            if not self._is_expected_final_push_failure(error):
+                raise
+
+            LOGGER.warning(
+                "Final push was aborted by collision detection or trajectory "
+                "tracking. Clearing the collision state before recovery: %s",
+                error,
+            )
+
+            # The failed MOVE command is already stopped by the robot. Clear
+            # only its collision flag so the explicitly taught retreat can run.
+            self._robot.clear_collision_detected()
+            self.recover_after_final_push_collision()
+            return False
+
         with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
-            self.move_to(QS_FINAL_PUSH_TARGET)
             self.move_to(QS_FINAL_PUSH_CONTACT)
 
         self.move_to(QS_SAFE)
 
         LOGGER.info("Part pushed into its final horizontal position.")
+        return True
 
     def raise_part_to_probe_height(self) -> None:
         """
@@ -308,19 +374,30 @@ class RobotService:
 
         LOGGER.info("Post-measurement robot handling completed.")
 
-    def prepare_part_for_measurement(self) -> None:
-        """Execute the complete mechanical sequence before QS measurement."""
+    def prepare_part_for_measurement(self) -> bool:
+        """
+        Execute the mechanical sequence before QS measurement.
+
+        False means the final push failed, recovery completed and measurement
+        must be skipped for this cycle.
+        """
         LOGGER.info("Starting complete part-handling cycle.")
 
         self.transfer_part_from_printer_to_qs()
         self.align_part_in_qs()
-        self.push_part_into_measurement_fixture()
+        if not self.push_part_into_measurement_fixture():
+            LOGGER.warning(
+                "Part handling ended after final-push recovery."
+            )
+            return False
+
         self.raise_part_to_probe_height()
 
         self.close_gripper()
 
 
         LOGGER.info("Part is ready for the Mitutoyo measurement.")
+        return True
 
     def get_current_joints(self) -> JointsPosition:
         return self._robot.get_joints()

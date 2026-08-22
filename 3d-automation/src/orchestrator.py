@@ -50,7 +50,7 @@ class RobotServiceProtocol(Protocol):
 
     def initialize(self) -> None: ...
 
-    def prepare_part_for_measurement(self) -> None: ...
+    def prepare_part_for_measurement(self) -> bool: ...
 
     def complete_part_handling_after_measurement(self) -> None: ...
 
@@ -416,96 +416,118 @@ class PrintOrchestrator:
             LOGGER.info("Cycle %s: starting robot handling.", cycle_id)
             with self.robot_service_factory() as robot_service:
                 robot_service.initialize()
-                robot_service.prepare_part_for_measurement()
-
-                stage = CycleStage.MEASURING
-                LOGGER.info(
-                    "Cycle %s: part is under the probe; starting QS "
-                    "measurement.",
-                    cycle_id,
+                handling_succeeded = (
+                    robot_service.prepare_part_for_measurement()
                 )
 
-                try:
-                    measurements = self._validate_measurements(
-                        self.quality_station.measure()
-                    )
-
-                except Exception as error:
+                if not handling_succeeded:
                     measurement_error = (
-                        "QS measurement failed; penalty values were used: "
-                        f"{type(error).__name__}: {error}"
+                        "Final push was aborted by collision detection or "
+                        "trajectory tracking. Recovery completed and QS "
+                        "measurement was skipped; penalty values were used."
                     )
-
                     measurements = {
                         parameter: self.MEASUREMENT_PENALTY_VALUE
                         for parameter in self.REQUIRED_MEASUREMENTS
                     }
-
                     LOGGER.warning(
-                        "Cycle %s: QS measurement failed. Saving "
-                        "Ra=%.1f um and Rz=%.1f um as penalty values.",
+                        "Cycle %s: final push failed and recovery completed. "
+                        "Skipping QS measurement and saving Ra=%.1f um and "
+                        "Rz=%.1f um as penalty values.",
                         cycle_id,
                         measurements["Ra"],
                         measurements["Rz"],
-                        exc_info=True,
                     )
 
-                    error_message = str(error)
-
-                    reset_required = (
-                        "HTTP 409" in error_message
-                        and "CTSTA was accepted" in error_message
-                        and "no measurement movement was detected"
-                        in error_message
+                else:
+                    stage = CycleStage.MEASURING
+                    LOGGER.info(
+                        "Cycle %s: part is under the probe; starting QS "
+                        "measurement.",
+                        cycle_id,
                     )
 
-                    if reset_required:
-                        LOGGER.warning(
-                            "Cycle %s: starting one additional QS "
-                            "measurement attempt to reset the SJ-220 "
-                            "error state. The result will be ignored.",
-                            cycle_id,
+                    try:
+                        measurements = self._validate_measurements(
+                            self.quality_station.measure()
                         )
 
-                        try:
-                            self.quality_station.measure()
+                    except Exception as error:
+                        measurement_error = (
+                            "QS measurement failed; penalty values were "
+                            f"used: {type(error).__name__}: {error}"
+                        )
 
-                        except Exception as reset_error:
-                            LOGGER.info(
-                                "Cycle %s: additional QS reset attempt "
-                                "ended with %s: %s. The result is "
-                                "intentionally ignored.",
+                        measurements = {
+                            parameter: self.MEASUREMENT_PENALTY_VALUE
+                            for parameter in self.REQUIRED_MEASUREMENTS
+                        }
+
+                        LOGGER.warning(
+                            "Cycle %s: QS measurement failed. Saving "
+                            "Ra=%.1f um and Rz=%.1f um as penalty values.",
+                            cycle_id,
+                            measurements["Ra"],
+                            measurements["Rz"],
+                            exc_info=True,
+                        )
+
+                        error_message = str(error)
+
+                        reset_required = (
+                            "HTTP 409" in error_message
+                            and "CTSTA was accepted" in error_message
+                            and "no measurement movement was detected"
+                            in error_message
+                        )
+
+                        if reset_required:
+                            LOGGER.warning(
+                                "Cycle %s: starting one additional QS "
+                                "measurement attempt to reset the SJ-220 "
+                                "error state. The result will be ignored.",
                                 cycle_id,
-                                type(reset_error).__name__,
-                                reset_error,
                             )
+
+                            try:
+                                self.quality_station.measure()
+
+                            except Exception as reset_error:
+                                LOGGER.info(
+                                    "Cycle %s: additional QS reset attempt "
+                                    "ended with %s: %s. The result is "
+                                    "intentionally ignored.",
+                                    cycle_id,
+                                    type(reset_error).__name__,
+                                    reset_error,
+                                )
+
+                            else:
+                                LOGGER.info(
+                                    "Cycle %s: additional QS reset attempt "
+                                    "completed successfully. Its result is "
+                                    "intentionally ignored.",
+                                    cycle_id,
+                                )
 
                         else:
                             LOGGER.info(
-                                "Cycle %s: additional QS reset attempt "
-                                "completed successfully. Its result is "
-                                "intentionally ignored.",
+                                "Cycle %s: no automatic SJ-220 reset attempt "
+                                "is required for this measurement error.",
                                 cycle_id,
                             )
 
                     else:
                         LOGGER.info(
-                            "Cycle %s: no automatic SJ-220 reset attempt "
-                            "is required for this measurement error.",
+                            "Cycle %s: QS measurement completed; Ra=%s um, "
+                            "Rz=%s um.",
                             cycle_id,
+                            measurements["Ra"],
+                            measurements["Rz"],
                         )
 
-                else:
-                    LOGGER.info(
-                        "Cycle %s: QS measurement completed; Ra=%s um, "
-                        "Rz=%s um.",
-                        cycle_id,
-                        measurements["Ra"],
-                        measurements["Rz"],
-                    )
-
-                stage = CycleStage.ROBOT_HANDLING
-                robot_service.complete_part_handling_after_measurement()
+                    stage = CycleStage.ROBOT_HANDLING
+                    robot_service.complete_part_handling_after_measurement()
 
             finished_at = datetime.now(timezone.utc)
             result = CycleResult(

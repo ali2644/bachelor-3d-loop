@@ -379,6 +379,69 @@ QS_FINAL_PUSH_TARGET: Final = RobotPosition(
         "derselben getesteten Bahn zu QS_FINAL_PUSH_CONTACT zurückfahren."
     ),
 )
+# -------------------------------------------------------------------------
+# Quality station: Recovery movements
+# -------------------------------------------------------------------------
+QS_SAFE_RECOVERY: Final = RobotPosition(
+    name="QS_SAFE_RECOVERY",
+    joints=(
+        1.7494873141428138,
+        -0.11717397955091746,
+        -0.19621592799803622,
+        0.21178200231801148,
+        0.3189753502904207,
+        -0.16250930992608525,
+    ),
+    station=RobotStation.QUALITY_STATION,
+    purpose=(
+        "Sichere Zwischenposition für die Recovery nach einem "
+        "fehlgeschlagenen finalen Einschub."
+    ),
+    movement_note=(
+        "Nur innerhalb der getesteten Recovery-Sequenz verwenden."
+    ),
+)
+
+QS_RECOVERY: Final = RobotPosition(
+    name="QS_RECOVERY",
+    joints=(
+        1.746443459927336,
+        -0.23685469701867257,
+        -0.3749795313043034,
+        0.18110238656029853,
+        0.41101419756355906,
+        -0.16557727150185642,
+    ),
+    station=RobotStation.QUALITY_STATION,
+    purpose=(
+        "Aufräumposition zum Entfernen beziehungsweise Verschieben "
+        "eines falsch eingelegten Bauteils."
+    ),
+    movement_note=(
+        "Langsam aus QS_SAFE_RECOVERY anfahren und anschließend "
+        "zu QS_FINAL_PUSH_CONTACT fahren."
+    ),
+)
+QS_RECOVERY_CLEAR_PART: Final = RobotPosition(
+    name="QS_RECOVERY_CLEAR_PART",
+    joints=(
+        1.7494873141428138,
+        0.44184101722885033,
+        -1.0748844866220615,
+        0.11207325110544453,
+        0.6119656807765779,
+        0.016966442256534986,
+    ),
+    station=RobotStation.QUALITY_STATION,
+    purpose=(
+        "Entfernt das fehlerhaft positionierte Bauteil vollständig "
+        "aus dem Arbeitsbereich der Qualitätsstation."
+    ),
+    movement_note=(
+        "Nur während der Recovery direkt aus "
+        "QS_FINAL_PUSH_CONTACT anfahren."
+    ),
+)
 
 
 # -------------------------------------------------------------------------
@@ -472,7 +535,7 @@ ALL_POSITIONS: Final[tuple[RobotPosition, ...]] = (
     PRINTER_SAFE,
     PRINTER_PICK,
     PRINTER_BREAK_OFF,
-    PRINTER_BREAK_OFF_1,    
+    PRINTER_BREAK_OFF_1,
     PRINTER_OUTSIDE,
     QS_SAFE,
     QS_PART_RELEASE,
@@ -481,6 +544,9 @@ ALL_POSITIONS: Final[tuple[RobotPosition, ...]] = (
     QS_ALIGNMENT_END,
     QS_FINAL_PUSH_CONTACT,
     QS_FINAL_PUSH_TARGET,
+    QS_SAFE_RECOVERY,
+    QS_RECOVERY,
+    QS_RECOVERY_CLEAR_PART,
     QS_LIFT_LEVER_GRIP,
     QS_PART_UNDER_PROBE,
     QS_LIFT_LEVER_END,

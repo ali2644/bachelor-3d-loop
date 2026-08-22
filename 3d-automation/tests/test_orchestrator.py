@@ -89,10 +89,11 @@ class FakeRobot:
     def check_connection(self) -> None:
         self.calls.append("robot.check")
 
-    def prepare_part_for_measurement(self) -> None:
+    def prepare_part_for_measurement(self) -> bool:
         self.calls.append("robot.prepare")
         if self.fail_during_prepare:
             raise RuntimeError("simulated movement failure")
+        return True
 
     def complete_part_handling_after_measurement(self) -> None:
         self.calls.append("robot.complete")
