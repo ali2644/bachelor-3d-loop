@@ -25,6 +25,8 @@ from robot.robot_positions import (
     QS_PART_SHIFT_END,
     QS_PART_RELEASE,
     QS_PART_UNDER_PROBE,
+    QS_LIFT_LEVER_APPROACH,
+    QS_PART_SHIFT_APPROACH,
     QS_RECOVERY,
     QS_RECOVERY_CLEAR_PART,
     QS_SAFE,
@@ -327,47 +329,69 @@ class RobotService:
 
     def raise_part_to_probe_height(self) -> None:
         """
-        Raise the part to the probe and stop there for the measurement.
+        Position the part under the Mitutoyo probe.
 
-        The gripper keeps holding the lift lever. The lever must only be moved
-        farther by complete_part_handling_after_measurement() after valid
-        measurement values have been received.
+        The robot moves the lift mechanism to QS_PART_UNDER_PROBE and then
+        returns to QS_SAFE. The part remains positioned under the probe so
+        that the quality-station measurement can be started.
+
+        No gripper action is required for this movement sequence.
         """
-        LOGGER.info("Starting quality-station lift-lever sequence.")
+        LOGGER.info(
+            "Starting movement for positioning the part under the "
+            "Mitutoyo probe."
+        )
 
-        self.open_gripper()
+        self.move_to(QS_SAFE)
         self.move_to(QS_LIFT_LEVER_GRIP)
-        self.close_gripper()
 
         time.sleep(LEVER_STEP_WAIT_SECONDS)
 
         with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
             self.move_to(QS_PART_UNDER_PROBE)
 
-        LOGGER.info("Part raised to the Mitutoyo probe height.")
-        time.sleep(LEVER_STEP_WAIT_SECONDS)
+        self.move_to(QS_LIFT_LEVER_GRIP)
+        self.move_to(QS_SAFE)
+
+        #time.sleep(LEVER_STEP_WAIT_SECONDS)
+
+        LOGGER.info(
+            "Part positioned under the Mitutoyo probe; robot returned "
+            "to QS_SAFE."
+        )
 
     def complete_part_handling_after_measurement(self) -> None:
         """
-        Finish the lift-lever sequence after a successful QS measurement.
+        Complete the quality-station movements after a valid measurement.
 
-        This method must not be called if starting the measurement failed or
-        if no valid Ra/Rz values were returned.
+        This method continues from QS_SAFE, operates the lift-lever end
+        position, shifts the measured part and finally moves the robot home.
+
+        It must not be called if the measurement failed or if no valid
+        Ra and Rz values were returned. No gripper action is required.
         """
         LOGGER.info(
-            "Measurement completed; continuing quality-station "
-            "lift-lever sequence."
+            "Measurement completed; continuing quality-station handling."
         )
 
-        with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
-            self.move_to(QS_LIFT_LEVER_END)
-            time.sleep(LEVER_STEP_WAIT_SECONDS)
+        # Complete the lift-lever movement.
+        self.move_to(QS_LIFT_LEVER_APPROACH)
 
-            self.move_to(QS_PART_SHIFT_END)
+        self.move_to(QS_LIFT_LEVER_END)
 
-        self.open_gripper(
-            settling_time_seconds=GRIPPER_SETTLING_TIME_SECONDS,
-        )
+        #time.sleep(LEVER_STEP_WAIT_SECONDS)
+
+        self.move_to(QS_LIFT_LEVER_APPROACH)
+        self.move_to(QS_SAFE)
+
+        # Shift the measured part.
+        self.move_to(QS_PART_SHIFT_APPROACH)
+
+        self.move_to(QS_PART_SHIFT_END)
+
+        #time.sleep(LEVER_STEP_WAIT_SECONDS)
+
+        self.move_to(QS_PART_SHIFT_APPROACH)
         self.move_to(QS_SAFE)
         self.move_to(HOME)
 
@@ -392,7 +416,7 @@ class RobotService:
 
         self.raise_part_to_probe_height()
 
-        self.close_gripper()
+        #self.close_gripper()
 
 
         LOGGER.info("Part is ready for the Mitutoyo measurement.")

@@ -443,20 +443,21 @@ QS_RECOVERY_CLEAR_PART: Final = RobotPosition(
     ),
 )
 
-
-# -------------------------------------------------------------------------
+# TODO: movement_note-Texte der QS-Positionen überarbeiten,
+# sobald die endgültige Bewegungssequenz vollständig getestet ist.
+# # -------------------------------------------------------------------------
 # Quality station: lift lever and Mitutoyo probe height
 # -------------------------------------------------------------------------
 
 QS_LIFT_LEVER_GRIP: Final = RobotPosition(
     name="QS_LIFT_LEVER_GRIP",
     joints=(
-        1.402702881177702,
-        -0.3041169323459576,
-        -0.2308957276631326,
-        -0.2928976768963647,
-        0.5291307182307534,
-        0.25013152201515254,
+        1.2289882432960568,
+        -0.41561830032493974,
+        -0.2446941933014306,
+        -0.35425690841179014,
+        0.7837715290197695,
+        1.7442288094157665,
     ),
     station=RobotStation.QUALITY_STATION,
     purpose=(
@@ -470,61 +471,110 @@ QS_LIFT_LEVER_GRIP: Final = RobotPosition(
 QS_PART_UNDER_PROBE: Final = RobotPosition(
     name="QS_PART_UNDER_PROBE",
     joints=(
-        1.6186015828772553,
-        -0.2883628539035292,
-        -0.22651484381265785,
-        -0.11802386707740142,
-        0.4263540054424153,
-        0.1059373279539022,
+        1.4207510588711778,
+        -0.3322962818347305,
+        -0.252268922255086,
+        -0.22847048380516766,
+        0.5168588719276683,
+        1.7380928862642242,
     ),
     station=RobotStation.QUALITY_STATION,
     purpose=(
-        "Zwischenposition der Hebelbewegung, durch die das Bauteil unter "
-        "der Mitutoyo-Messnadel positioniert wird."
+        "Positioniert das Bauteil unter der Mitutoyo-Messnadel."
     ),
     movement_note=(
-        "Langsam anfahren und vor dem nächsten Hebelschritt drei Sekunden warten."
+        "Langsam aus QS_LIFT_LEVER_GRIP anfahren und vor der "
+        "Rauheitsmessung drei Sekunden warten."
+    ),
+)
+
+QS_LIFT_LEVER_APPROACH: Final = RobotPosition(
+    name="QS_LIFT_LEVER_APPROACH",
+    joints=(
+        1.918421223101849,
+        -0.3565354144864278,
+        -0.009877595738113643,
+        0.06298586589310418,
+        -0.11053927031755917,
+        -1.7287036943573246,
+    ),
+    station=RobotStation.QUALITY_STATION,
+    purpose=(
+        "Sichere Zwischenposition zum Anfahren und Verlassen der "
+        "Hebelendposition."
+    ),
+    movement_note=(
+        "Aus QS_SAFE anfahren. Anschließend langsam zu "
+        "QS_LIFT_LEVER_END fahren und auf derselben getesteten "
+        "Bahn zu dieser Position zurückkehren."
     ),
 )
 
 QS_LIFT_LEVER_END: Final = RobotPosition(
     name="QS_LIFT_LEVER_END",
     joints=(
-        1.3674836101003112,
-        -0.3065422033923022,
-        -0.1901561448351119,
-        -0.1118879439258591,
-        0.33124719659350577,
-        0.05684994274156141,
+        1.7160049177725551,
+        -0.3050272576015711,
+        -0.05684091525077695,
+        0.1059373279539022,
+        -0.1534907323783572,
+        -1.7655192332665801,
     ),
     station=RobotStation.QUALITY_STATION,
     purpose=(
-        "Endposition der Hebelbewegung. Der Hubmechanismus bringt das "
-        "Bauteil auf die erforderliche Höhe für die Rauheitsmessung."
+        "Endposition der Hebelbewegung nach der Rauheitsmessung."
     ),
     movement_note=(
-        "Langsam anfahren, drei Sekunden halten und danach langsam zum "
-        "Hebelstart zurückfahren."
+        "Nur langsam aus QS_LIFT_LEVER_APPROACH anfahren und "
+        "anschließend auf derselben getesteten Bahn zurückfahren."
+    ),
+)
+
+
+# -------------------------------------------------------------------------
+# Quality station: part shift after measurement
+# -------------------------------------------------------------------------
+
+QS_PART_SHIFT_APPROACH: Final = RobotPosition(
+    name="QS_PART_SHIFT_APPROACH",
+    joints=(
+        1.1331068355084963,
+        -0.44743216193029245,
+        -0.13713304215952427,
+        -0.4723734290789845,
+        0.736218124595315,
+        1.8623453300829609,
+    ),
+    station=RobotStation.QUALITY_STATION,
+    purpose=(
+        "Sichere Zwischenposition zum Anfahren und Verlassen der "
+        "Bauteilverschiebung."
+    ),
+    movement_note=(
+        "Aus QS_SAFE anfahren. Anschließend langsam zu "
+        "QS_PART_SHIFT_END fahren und auf derselben getesteten "
+        "Bahn zu dieser Position zurückkehren."
     ),
 )
 
 QS_PART_SHIFT_END: Final = RobotPosition(
     name="QS_PART_SHIFT_END",
     joints=(
-        1.4046633504402222,
-        -0.33023649867180615,
-        -0.2765080549067833,
-        -0.3011015616236786,
-        0.6100918921098358,
-        0.1254227708025856,
+        1.3020407444675315,
+        -0.38986422188251146,
+        -0.28105289227897656,
+        -0.21926659907785373,
+        0.7776356058682272,
+        1.70434530893074,
     ),
     station=RobotStation.QUALITY_STATION,
     purpose=(
-        "Endposition der Bauteilverschiebung nach der Bewegung "
-        "über QS_LIFT_LEVER_END."
+        "Endposition für das Verschieben des Bauteils nach Abschluss "
+        "der Rauheitsmessung."
     ),
     movement_note=(
-        "Langsam anfahren und anschließend den Greifer öffnen."
+        "Nur langsam aus QS_PART_SHIFT_APPROACH anfahren und "
+        "anschließend auf derselben getesteten Bahn zurückfahren."
     ),
 )
 
@@ -549,7 +599,9 @@ ALL_POSITIONS: Final[tuple[RobotPosition, ...]] = (
     QS_RECOVERY_CLEAR_PART,
     QS_LIFT_LEVER_GRIP,
     QS_PART_UNDER_PROBE,
+    QS_LIFT_LEVER_APPROACH,
     QS_LIFT_LEVER_END,
+    QS_PART_SHIFT_APPROACH,
     QS_PART_SHIFT_END,
 )
 
