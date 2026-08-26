@@ -9,3 +9,5 @@ data/gcode/cycle_*.gcode
 # Generated experiment artifacts
 config/experiment_plans/archive/
 data/camera_images/
+# Generated experiment runs: images, CSV results and logs
+data/experiments/
