@@ -74,7 +74,7 @@ def parse_arguments(
         type=Path,
         default=(
             PROJECT_DIR
-            / "data/models/Oberflächenmessung_Testkörper_MK1 (1).stl"
+            / "data/models/15x15_V2_rounded.stl"
         ),
     )
     parser.add_argument(
