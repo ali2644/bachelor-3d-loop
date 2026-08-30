@@ -83,8 +83,9 @@ class FakeRobot:
     def initialize(self) -> None:
         self.calls.append("robot.initialize")
 
-    def prepare_part_for_measurement(self) -> None:
+    def prepare_part_for_measurement(self) -> bool:
         self.calls.append("robot.prepare")
+        return True
 
     def complete_part_handling_after_measurement(self) -> None:
         self.calls.append("robot.complete")
@@ -112,6 +113,7 @@ class FakeCamera:
     ) -> None:
         self.calls = calls
         self.fail_capture = fail_capture
+        self.download_directory = Path("data/camera_images")
 
     def health(self) -> bool:
         self.calls.append("camera.health")

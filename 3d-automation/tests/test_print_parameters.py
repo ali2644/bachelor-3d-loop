@@ -13,10 +13,10 @@ from printer.print_parameters import (
 BASE_PROFILE = """\
 # unchanged full profile
 top_solid_layers = 5
-top_solid_infill_speed = 80
+top_solid_infill_speed = 115
 top_infill_extrusion_width = 0.40
-extrusion_multiplier = 1.05
-temperature = 220
+extrusion_multiplier = 1.00
+temperature = 210
 min_fan_speed = 60
 max_fan_speed = 80
 bridge_fan_speed = 100
@@ -47,25 +47,37 @@ class PrintParametersTest(unittest.TestCase):
             parameters,
             PrintParameters(
                 top_solid_layers=5,
-                print_speed=80,
+                print_speed=115,
                 extrusion_width=0.40,
-                extrusion_multiplier=1.05,
-                temperature=220,
+                extrusion_multiplier=1.00,
+                temperature=210,
                 fan_speed=80,
             ),
         )
 
-    def test_rejects_parameter_outside_boundary(self) -> None:
-        with self.assertRaisesRegex(
-            ValueError,
-            r"top_solid_layers is fixed at 5, got 6",
-        ):
+    def test_accepts_variable_layers_and_bounds_outside_old_envelope(
+        self,
+    ) -> None:
+        parameters = PrintParameters(
+            top_solid_layers=7,
+            print_speed=160,
+            extrusion_width=0.60,
+            extrusion_multiplier=1.40,
+            temperature=260,
+            fan_speed=50,
+        )
+
+        self.assertEqual(parameters.top_solid_layers, 7)
+        self.assertEqual(parameters.print_speed, 160)
+
+    def test_rejects_values_outside_intrinsic_domain(self) -> None:
+        with self.assertRaisesRegex(ValueError, "greater than 0"):
             PrintParameters(
-                top_solid_layers=6,
-                print_speed=80,
+                top_solid_layers=5,
+                print_speed=0,
                 extrusion_width=0.40,
-                extrusion_multiplier=1.05,
-                temperature=220,
+                extrusion_multiplier=1.00,
+                temperature=210,
                 fan_speed=50,
             )
 
@@ -75,7 +87,7 @@ class PrintParametersTest(unittest.TestCase):
                 "top_solid_layers = 5",
                 "top_solid_layers = 7",
             ).replace(
-                "top_solid_infill_speed = 80",
+                "top_solid_infill_speed = 115",
                 "top_solid_infill_speed = 40",
             ),
             encoding="utf-8",
@@ -84,24 +96,22 @@ class PrintParametersTest(unittest.TestCase):
         parameters = PrintParameters.from_profile(
             self.base_profile,
             top_solid_layers=5,
-            print_speed=80,
+            print_speed=115,
         )
 
         self.assertEqual(parameters.top_solid_layers, 5)
-        self.assertEqual(parameters.print_speed, 80)
+        self.assertEqual(parameters.print_speed, 115)
         self.assertEqual(parameters.extrusion_width, 0.40)
-        self.assertEqual(parameters.extrusion_multiplier, 1.05)
-        self.assertEqual(parameters.temperature, 220)
-        self.assertEqual(parameters.fan_speed, 80)
+        self.assertEqual(parameters.temperature, 210)
 
     def test_generated_profile_changes_only_controlled_settings(self) -> None:
         parameters = PrintParameters(
-            top_solid_layers=5,
-            print_speed=90,
+            top_solid_layers=7,
+            print_speed=120,
             extrusion_width=0.38,
-            extrusion_multiplier=1.05,
-            temperature=215,
-            fan_speed=30,
+            extrusion_multiplier=0.90,
+            temperature=195,
+            fan_speed=25,
         )
 
         output_path = SlicerProfileGenerator(
@@ -114,14 +124,14 @@ class PrintParametersTest(unittest.TestCase):
         generated = output_path.read_text(encoding="utf-8")
         original = self.base_profile.read_text(encoding="utf-8")
 
-        self.assertIn("top_solid_layers = 5\n", generated)
-        self.assertIn("top_solid_infill_speed = 90\n", generated)
+        self.assertIn("top_solid_layers = 7\n", generated)
+        self.assertIn("top_solid_infill_speed = 120\n", generated)
         self.assertIn("top_infill_extrusion_width = 0.38\n", generated)
-        self.assertIn("extrusion_multiplier = 1.05\n", generated)
-        self.assertIn("temperature = 215\n", generated)
-        self.assertIn("min_fan_speed = 30\n", generated)
-        self.assertIn("max_fan_speed = 30\n", generated)
-        self.assertIn("bridge_fan_speed = 30\n", generated)
+        self.assertIn("extrusion_multiplier = 0.9\n", generated)
+        self.assertIn("temperature = 195\n", generated)
+        self.assertIn("min_fan_speed = 25\n", generated)
+        self.assertIn("max_fan_speed = 25\n", generated)
+        self.assertIn("bridge_fan_speed = 25\n", generated)
         self.assertIn("skirts = 0\n", generated)
         self.assertIn("brim_width = 0\n", generated)
         self.assertIn("top_solid_min_thickness = 0\n", generated)

@@ -60,13 +60,17 @@ class QualityStationProtocol(Protocol):
 
     def measure(self) -> dict[str, float]: ...
 
+
 class CameraServiceProtocol(Protocol):
+    download_directory: Path
+
     def health(self) -> bool: ...
 
     def capture_still(
         self,
         cycle_id: str,
     ) -> str: ...
+
 
 class CycleRecorderProtocol(Protocol):
     def record(self, result: "CycleResult") -> None: ...
@@ -389,11 +393,8 @@ class PrintOrchestrator:
                     )
 
                     image_file = (
-                        Path(__file__).resolve().parents[1]
-                        / "data"
-                        / "camera_images"
-                        / filename
-                    )
+                        self.camera_service.download_directory / filename
+                    ).resolve()
 
                     camera_image_path = image_file.as_uri()
 
@@ -421,22 +422,11 @@ class PrintOrchestrator:
                 )
 
                 if not handling_succeeded:
-                    measurement_error = (
-                        "Final push was aborted by collision detection or "
-                        "trajectory tracking. Recovery completed and QS "
-                        "measurement was skipped; penalty values were used."
-                    )
-                    measurements = {
-                        parameter: self.MEASUREMENT_PENALTY_VALUE
-                        for parameter in self.REQUIRED_MEASUREMENTS
-                    }
-                    LOGGER.warning(
-                        "Cycle %s: final push failed and recovery completed. "
-                        "Skipping QS measurement and saving Ra=%.1f um and "
-                        "Rz=%.1f um as penalty values.",
-                        cycle_id,
-                        measurements["Ra"],
-                        measurements["Rz"],
+                    raise CycleExecutionError(
+                        CycleStage.ROBOT_HANDLING,
+                        "Final push failed. Robot recovery returned the "
+                        "robot to a safe position, but the part or fixture "
+                        "must be inspected manually.",
                     )
 
                 else:
@@ -452,69 +442,47 @@ class PrintOrchestrator:
                             self.quality_station.measure()
                         )
 
-                    except Exception as error:
-                        measurement_error = (
-                            "QS measurement failed; penalty values were "
-                            f"used: {type(error).__name__}: {error}"
-                        )
-
-                        measurements = {
-                            parameter: self.MEASUREMENT_PENALTY_VALUE
-                            for parameter in self.REQUIRED_MEASUREMENTS
-                        }
-
+                    except Exception as first_error:
                         LOGGER.warning(
-                            "Cycle %s: QS measurement failed. Saving "
-                            "Ra=%.1f um and Rz=%.1f um as penalty values.",
+                            "Cycle %s: first QS measurement failed. "
+                            "Starting exactly one additional measurement.",
                             cycle_id,
-                            measurements["Ra"],
-                            measurements["Rz"],
                             exc_info=True,
                         )
 
-                        error_message = str(error)
-
-                        reset_required = (
-                            "HTTP 409" in error_message
-                            and "CTSTA was accepted" in error_message
-                            and "no measurement movement was detected"
-                            in error_message
-                        )
-
-                        if reset_required:
-                            LOGGER.warning(
-                                "Cycle %s: starting one additional QS "
-                                "measurement attempt to reset the SJ-220 "
-                                "error state. The result will be ignored.",
-                                cycle_id,
-                            )
-
-                            try:
+                        try:
+                            measurements = self._validate_measurements(
                                 self.quality_station.measure()
-
-                            except Exception as reset_error:
-                                LOGGER.info(
-                                    "Cycle %s: additional QS reset attempt "
-                                    "ended with %s: %s. The result is "
-                                    "intentionally ignored.",
-                                    cycle_id,
-                                    type(reset_error).__name__,
-                                    reset_error,
-                                )
-
-                            else:
-                                LOGGER.info(
-                                    "Cycle %s: additional QS reset attempt "
-                                    "completed successfully. Its result is "
-                                    "intentionally ignored.",
-                                    cycle_id,
-                                )
-
+                            )
+                        except Exception as second_error:
+                            measurement_error = (
+                                "QS measurement failed twice; penalty "
+                                "values were used. First error: "
+                                f"{type(first_error).__name__}: "
+                                f"{first_error}; second error: "
+                                f"{type(second_error).__name__}: "
+                                f"{second_error}"
+                            )
+                            measurements = {
+                                parameter: self.MEASUREMENT_PENALTY_VALUE
+                                for parameter in self.REQUIRED_MEASUREMENTS
+                            }
+                            LOGGER.warning(
+                                "Cycle %s: second QS measurement also "
+                                "failed. Saving temporary penalty values "
+                                "Ra=%.1f um and Rz=%.1f um.",
+                                cycle_id,
+                                measurements["Ra"],
+                                measurements["Rz"],
+                                exc_info=True,
+                            )
                         else:
                             LOGGER.info(
-                                "Cycle %s: no automatic SJ-220 reset attempt "
-                                "is required for this measurement error.",
+                                "Cycle %s: second QS measurement succeeded; "
+                                "Ra=%s um, Rz=%s um.",
                                 cycle_id,
+                                measurements["Ra"],
+                                measurements["Rz"],
                             )
 
                     else:

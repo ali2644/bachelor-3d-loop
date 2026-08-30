@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "experiment_name": "framework_step_5_simulation",
+  "total_runs": 12,
+  "seed": 42,
+  "objective": "Ra_um",
+  "warm_start": {
+    "method": "lhs",
+    "sample_count": 4
+  },
+  "strategy": {
+    "name": "bayesian",
+    "options": {
+      "acquisition": "ei",
+      "candidate_count": 64,
+      "n_restarts_optimizer": 0
+    }
+  },
+  "parameters": [
+    {
+      "name": "print_speed",
+      "lower": 50,
+      "upper": 90
+    },
+    {
+      "name": "extrusion_width",
+      "lower": 0.38,
+      "upper": 0.5
+    },
+    {
+      "name": "extrusion_multiplier",
+      "lower": 1.05,
+      "upper": 1.2
+    },
+    {
+      "name": "temperature",
+      "lower": 215,
+      "upper": 235
+    },
+    {
+      "name": "fan_speed",
+      "lower": 30,
+      "upper": 80
+    }
+  ],
+  "fixed_parameters": {
+    "top_solid_layers": 5
+  },
+  "paths": {
+    "stl": "../data/models/Oberflächenmessung_Testkörper_MK1 (1).stl",
+    "base_profile": "slicer_profile.ini",
+    "output_directory": "../data/optimization_runs/framework_step_5_simulation",
+    "history_csvs": []
+  }
+}

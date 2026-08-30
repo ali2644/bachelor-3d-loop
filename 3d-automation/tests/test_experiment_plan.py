@@ -25,25 +25,11 @@ def valid_rows() -> list[dict[str, object]]:
         {
             "cycle_number": cycle_number,
             "top_solid_layers": 5,
-            "print_speed": round(
-                50 + (90 - 50) * (cycle_number - 1) / 19
-            ),
-            "extrusion_width": round(
-                0.38
-                + (0.50 - 0.38) * (cycle_number - 1) / 19,
-                3,
-            ),
-            "extrusion_multiplier": round(
-                1.05
-                + (1.20 - 1.05) * (cycle_number - 1) / 19,
-                3,
-            ),
-            "temperature": round(
-                215 + (235 - 215) * (cycle_number - 1) / 19
-            ),
-            "fan_speed": round(
-                30 + (80 - 30) * (cycle_number - 1) / 19
-            ),
+            "print_speed": round(50 + (120 - 50) * (cycle_number - 1) / 19),
+            "extrusion_width": round(0.38 + (0.50 - 0.38) * (cycle_number - 1) / 19,3,),
+            "extrusion_multiplier": 0.90 + 0.01 * (cycle_number - 1),
+            "temperature": 195 + 2 * (cycle_number - 1),
+            "fan_speed": 5 * (cycle_number - 1),
         }
         for cycle_number in range(1, 21)
     ]
@@ -91,9 +77,9 @@ class ExperimentPlanTest(unittest.TestCase):
                 top_solid_layers=5,
                 print_speed=50,
                 extrusion_width=0.38,
-                extrusion_multiplier=1.05,
-                temperature=215,
-                fan_speed=30,
+                extrusion_multiplier=0.90,
+                temperature=195,
+                fan_speed=0,
             ),
         )
 
@@ -108,16 +94,18 @@ class ExperimentPlanTest(unittest.TestCase):
         ):
             load_experiment_plan(self.plan_path)
 
-    def test_rejects_out_of_range_parameter_with_csv_line_number(self) -> None:
+    def test_accepts_plan_values_outside_the_old_fixed_envelope(self) -> None:
         rows = valid_rows()
-        rows[4]["temperature"] = 236
+        rows[4]["temperature"] = 260
+        rows[4]["top_solid_layers"] = 7
+        rows[4]["print_speed"] = 160
         self.write_plan(rows)
 
-        with self.assertRaisesRegex(
-            ValueError,
-            r"row 6: temperature must be between 215 and 235",
-        ):
-            load_experiment_plan(self.plan_path)
+        plan = load_experiment_plan(self.plan_path)
+
+        self.assertEqual(plan[4].parameters.temperature, 260)
+        self.assertEqual(plan[4].parameters.top_solid_layers, 7)
+        self.assertEqual(plan[4].parameters.print_speed, 160)
 
     def test_rejects_missing_required_column(self) -> None:
         rows = valid_rows()

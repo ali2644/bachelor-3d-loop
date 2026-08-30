@@ -72,9 +72,11 @@ class FakeRobot:
         calls: list[str],
         *,
         fail_during_prepare: bool = False,
+        handling_succeeds: bool = True,
     ) -> None:
         self.calls = calls
         self.fail_during_prepare = fail_during_prepare
+        self.handling_succeeds = handling_succeeds
 
     def __enter__(self) -> "FakeRobot":
         self.calls.append("robot.enter")
@@ -93,7 +95,7 @@ class FakeRobot:
         self.calls.append("robot.prepare")
         if self.fail_during_prepare:
             raise RuntimeError("simulated movement failure")
-        return True
+        return self.handling_succeeds
 
     def complete_part_handling_after_measurement(self) -> None:
         self.calls.append("robot.complete")
@@ -104,10 +106,10 @@ class FakeQualityStation:
         self,
         calls: list[str],
         *,
-        fail_during_measurement: bool = False,
+        measurement_failures: int = 0,
     ) -> None:
         self.calls = calls
-        self.fail_during_measurement = fail_during_measurement
+        self.measurement_failures = measurement_failures
 
     def health(self) -> bool:
         self.calls.append("qs.health")
@@ -115,7 +117,8 @@ class FakeQualityStation:
 
     def measure(self) -> dict[str, float]:
         self.calls.append("qs.measure")
-        if self.fail_during_measurement:
+        if self.measurement_failures > 0:
+            self.measurement_failures -= 1
             raise RuntimeError("simulated measurement failure")
         return {"Ra": 4.152, "Rz": 22.5}
 
@@ -159,6 +162,8 @@ class PrintOrchestratorTest(unittest.TestCase):
         *,
         fail_robot: bool = False,
         fail_measurement: bool = False,
+        fail_first_measurement_only: bool = False,
+        handling_succeeds: bool = True,
         max_status_errors: int = 5,
     ) -> tuple[PrintOrchestrator, FakeRecorder]:
         recorder = FakeRecorder(calls)
@@ -168,10 +173,15 @@ class PrintOrchestratorTest(unittest.TestCase):
             lambda: FakeRobot(
                 calls,
                 fail_during_prepare=fail_robot,
+                handling_succeeds=handling_succeeds,
             ),
             FakeQualityStation(
                 calls,
-                fail_during_measurement=fail_measurement,
+                measurement_failures=(
+                    2
+                    if fail_measurement
+                    else 1 if fail_first_measurement_only else 0
+                ),
             ),
             recorder,
             print_poll_interval_seconds=0,
@@ -315,7 +325,7 @@ class PrintOrchestratorTest(unittest.TestCase):
         )
 
         self.assertIn("robot.prepare", calls)
-        self.assertEqual(calls.count("qs.measure"), 1)
+        self.assertEqual(calls.count("qs.measure"), 2)
         self.assertIn("robot.complete", calls)
         self.assertIn("robot.exit", calls)
 
@@ -332,6 +342,40 @@ class PrintOrchestratorTest(unittest.TestCase):
             recorder.results[-1].measurements,
             {"Ra": 100.0, "Rz": 100.0},
         )
+
+    def test_second_measurement_success_is_used(self) -> None:
+        calls: list[str] = []
+        orchestrator, recorder = self.create_orchestrator(
+            calls,
+            [],
+            fail_first_measurement_only=True,
+        )
+
+        result = orchestrator.run_handling_and_measurement_cycle(
+            self.request
+        )
+
+        self.assertEqual(result.status, CycleStatus.COMPLETED)
+        self.assertEqual(result.measurements, {"Ra": 4.152, "Rz": 22.5})
+        self.assertIsNone(result.error)
+        self.assertEqual(calls.count("qs.measure"), 2)
+        self.assertEqual(recorder.results[-1].status, CycleStatus.COMPLETED)
+
+    def test_successful_robot_recovery_still_requires_manual_stop(self) -> None:
+        calls: list[str] = []
+        orchestrator, recorder = self.create_orchestrator(
+            calls,
+            [],
+            handling_succeeds=False,
+        )
+
+        with self.assertRaises(CycleExecutionError) as context:
+            orchestrator.run_handling_and_measurement_cycle(self.request)
+
+        self.assertEqual(context.exception.stage, CycleStage.ROBOT_HANDLING)
+        self.assertNotIn("qs.measure", calls)
+        self.assertEqual(recorder.results[-1].status, CycleStatus.FAILED)
+        self.assertEqual(recorder.results[-1].stage, CycleStage.ROBOT_HANDLING)
 
 
 if __name__ == "__main__":

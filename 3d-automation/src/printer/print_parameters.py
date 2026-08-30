@@ -16,12 +16,14 @@ PROFILE_PARAMETER_KEYS = (
     "temperature",
     "max_fan_speed",
 )
-FIXED_TOP_SOLID_LAYERS = 5
+DEFAULT_TOP_SOLID_LAYERS = 5
+# Backward-compatible name for the legacy optimizer. The framework no longer
+# treats this value as fixed.
+FIXED_TOP_SOLID_LAYERS = DEFAULT_TOP_SOLID_LAYERS
 
 # These are constant experimental conditions, not optimization variables.
 # They make sure the six logical parameters have the intended effect.
 FIXED_PROFILE_OVERRIDES = {
-    "top_solid_layers": str(FIXED_TOP_SOLID_LAYERS),
     "skirts": "0",
     "brim_width": "0",
     "top_solid_min_thickness": "0",
@@ -121,41 +123,39 @@ class PrintParameters:
     fan_speed: int
 
     def __post_init__(self) -> None:
-        if self.top_solid_layers != FIXED_TOP_SOLID_LAYERS:
-            raise ValueError(
-                "top_solid_layers is fixed at "
-                f"{FIXED_TOP_SOLID_LAYERS}, got "
-                f"{self.top_solid_layers}."
-            )
+        self._validate_int(
+            "top_solid_layers",
+            self.top_solid_layers,
+            0,
+        )
         self._validate_float(
             "print_speed",
             self.print_speed,
-            50,
-            90,
+            0,
+            exclusive_minimum=True,
         )
         self._validate_float(
             "extrusion_width",
             self.extrusion_width,
-            0.38,
-            0.50,
+            0,
+            exclusive_minimum=True,
         )
         self._validate_float(
             "extrusion_multiplier",
             self.extrusion_multiplier,
-            1.05,
-            1.20,
+            0,
+            exclusive_minimum=True,
         )
         self._validate_int(
             "temperature",
             self.temperature,
-            215,
-            235,
+            0,
         )
         self._validate_int(
             "fan_speed",
             self.fan_speed,
-            30,
-            80,
+            0,
+            100,
         )
 
     @classmethod
@@ -323,14 +323,17 @@ class PrintParameters:
         name: str,
         value: int,
         minimum: int,
-        maximum: int,
+        maximum: int | None = None,
     ) -> None:
         if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError(f"{name} must be an integer.")
-        if not minimum <= value <= maximum:
+        if value < minimum:
             raise ValueError(
-                f"{name} must be between {minimum} and {maximum}, "
-                f"got {value}."
+                f"{name} must be at least {minimum}, got {value}."
+            )
+        if maximum is not None and value > maximum:
+            raise ValueError(
+                f"{name} must be at most {maximum}, got {value}."
             )
 
     @staticmethod
@@ -338,16 +341,28 @@ class PrintParameters:
         name: str,
         value: float,
         minimum: float,
-        maximum: float,
+        maximum: float | None = None,
+        *,
+        exclusive_minimum: bool = False,
     ) -> None:
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"{name} must be numeric.")
         if not math.isfinite(float(value)):
             raise ValueError(f"{name} must be finite.")
-        if not minimum <= float(value) <= maximum:
+        numeric_value = float(value)
+        invalid_minimum = (
+            numeric_value <= minimum
+            if exclusive_minimum
+            else numeric_value < minimum
+        )
+        if invalid_minimum:
+            comparison = "greater than" if exclusive_minimum else "at least"
             raise ValueError(
-                f"{name} must be between {minimum} and {maximum}, "
-                f"got {value}."
+                f"{name} must be {comparison} {minimum}, got {value}."
+            )
+        if maximum is not None and numeric_value > maximum:
+            raise ValueError(
+                f"{name} must be at most {maximum}, got {value}."
             )
 
 
