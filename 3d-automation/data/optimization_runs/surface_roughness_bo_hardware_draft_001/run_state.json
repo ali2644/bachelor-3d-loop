@@ -1,0 +1,16 @@
+{
+  "completed_runs": 3,
+  "config_sha256": "8e2bc01a25aab9af693d0815827d82cdb21094806a3145006998f57195661a97",
+  "consecutive_penalty_runs": 1,
+  "created_at": "2026-08-27T17:17:18.467588+00:00",
+  "current_run_number": null,
+  "experiment_id": "7855f0e2b68347b3a762c83d3727d662",
+  "experiment_name": "surface_roughness_bo_hardware_draft_001",
+  "last_error": null,
+  "pause_reason": null,
+  "resume_run_number": null,
+  "schema_version": 1,
+  "status": "ready",
+  "total_runs": 12,
+  "updated_at": "2026-08-29T15:28:07.505741+00:00"
+}

@@ -1,0 +1,26 @@
+{
+  "Ra_um": 4.249123,
+  "Rz_um": 22.09544,
+  "attempt_number": 1,
+  "cycle_id": "simulation-run-0009-attempt-1",
+  "error": null,
+  "failed_stage": null,
+  "finished_at": "2026-08-27T16:49:21.463266+00:00",
+  "objective_value": 4.249123,
+  "optimizer_iteration": 4,
+  "parameters": {
+    "extrusion_multiplier": 1.2,
+    "extrusion_width": 0.5,
+    "fan_speed": 45,
+    "print_speed": 57.1,
+    "temperature": 228,
+    "top_solid_layers": 5
+  },
+  "proposed_at": "2026-08-27T16:49:21.446264+00:00",
+  "run_number": 9,
+  "schema_version": 1,
+  "started_at": "2026-08-27T16:49:21.456885+00:00",
+  "status": "completed",
+  "strategy": "bayesian",
+  "updated_at": "2026-08-27T16:49:21.463266+00:00"
+}

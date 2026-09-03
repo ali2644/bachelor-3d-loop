@@ -1,0 +1,17 @@
+{
+  "attempt_number": 1,
+  "checked_at": "2026-08-27T17:22:27.438343+00:00",
+  "experiment_id": "7855f0e2b68347b3a762c83d3727d662",
+  "gcode_path": "/home/hs-coburg.de/ali2644s/Projects/bachelor-3d-loop/3d-automation/data/optimization_runs/surface_roughness_bo_hardware_draft_001/gcode/run_0001_attempt_01.gcode",
+  "parameters": {
+    "extrusion_multiplier": 1.052,
+    "extrusion_width": 0.459,
+    "fan_speed": 45,
+    "print_speed": 50.9,
+    "temperature": 226,
+    "top_solid_layers": 5
+  },
+  "profile_path": "/home/hs-coburg.de/ali2644s/Projects/bachelor-3d-loop/3d-automation/data/optimization_runs/surface_roughness_bo_hardware_draft_001/generated_profiles/run_0001_attempt_01_profile.ini",
+  "run_number": 1,
+  "schema_version": 1
+}

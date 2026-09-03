@@ -1,0 +1,56 @@
+{
+  "experiment_name": "surface_roughness_bo_hardware_new_model_001",
+  "fixed_parameters": {
+    "top_solid_layers": 5
+  },
+  "objective": "Ra_um",
+  "parameters": [
+    {
+      "lower": 50.0,
+      "name": "print_speed",
+      "upper": 90.0
+    },
+    {
+      "lower": 0.38,
+      "name": "extrusion_width",
+      "upper": 0.5
+    },
+    {
+      "lower": 1.05,
+      "name": "extrusion_multiplier",
+      "upper": 1.2
+    },
+    {
+      "lower": 215,
+      "name": "temperature",
+      "upper": 235
+    },
+    {
+      "lower": 30,
+      "name": "fan_speed",
+      "upper": 80
+    }
+  ],
+  "paths": {
+    "base_profile": "/home/hs-coburg.de/ali2644s/Projects/bachelor-3d-loop/3d-automation/config/slicer_profile.ini",
+    "history_csvs": [],
+    "output_directory": "/home/hs-coburg.de/ali2644s/Projects/bachelor-3d-loop/3d-automation/data/optimization_runs/surface_roughness_bo_hardware_new_model_001",
+    "stl": "/home/hs-coburg.de/ali2644s/Projects/bachelor-3d-loop/3d-automation/data/models/15x15_V2_rounded.stl"
+  },
+  "schema_version": 1,
+  "seed": 42,
+  "source_path": "/home/hs-coburg.de/ali2644s/Projects/bachelor-3d-loop/3d-automation/config/optimizer_config.hardware.new_model.json",
+  "strategy": {
+    "name": "bayesian",
+    "options": {
+      "acquisition": "ei",
+      "candidate_count": 4096,
+      "n_restarts_optimizer": 5
+    }
+  },
+  "total_runs": 12,
+  "warm_start": {
+    "method": "lhs",
+    "sample_count": 10
+  }
+}

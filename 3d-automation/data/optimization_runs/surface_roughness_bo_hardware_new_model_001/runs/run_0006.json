@@ -1,0 +1,29 @@
+{
+  "Ra_um": null,
+  "Rz_um": null,
+  "attempt_number": 2,
+  "cycle_id": "0c23ed57fa9c4b8c97998065a8b20ec4",
+  "error": "The physical cycle produced no valid measurement: QS measurement failed twice; penalty values were used. First error: QualityStationClientError: QS measurement failed with HTTP 409: {'type': 'invalid_state', 'message': 'CTSTA was accepted, but no measurement movement was detected within 30.0 seconds.'}; second error: QualityStationClientError: QS measurement failed with HTTP 409: {'type': 'invalid_state', 'message': 'CTSTA was accepted, but no measurement movement was detected within 30.0 seconds.'}",
+  "failed_stage": "measurement_penalty",
+  "finished_at": "2026-08-30T06:26:51.933382+00:00",
+  "is_ignored": false,
+  "is_penalty": true,
+  "objective_value": 100.0,
+  "optimizer_iteration": null,
+  "parameters": {
+    "extrusion_multiplier": 1.109,
+    "extrusion_width": 0.434,
+    "fan_speed": 62,
+    "print_speed": 57.2,
+    "temperature": 217,
+    "top_solid_layers": 5
+  },
+  "proposed_at": "2026-08-30T06:17:09.376080+00:00",
+  "run_number": 6,
+  "schema_version": 1,
+  "soft_failure_count": 2,
+  "started_at": "2026-08-30T06:17:09.462657+00:00",
+  "status": "completed",
+  "strategy": "bayesian",
+  "updated_at": "2026-08-30T06:26:51.937052+00:00"
+}

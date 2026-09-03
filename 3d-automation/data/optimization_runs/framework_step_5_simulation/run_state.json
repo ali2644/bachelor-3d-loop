@@ -1,0 +1,13 @@
+{
+  "completed_runs": 12,
+  "config_sha256": "4f4ec3fffbadb2021bdb7b254db2146434c7ea8d57da11c6f01677b420f2451d",
+  "created_at": "2026-08-27T16:44:21.040791+00:00",
+  "current_run_number": null,
+  "experiment_id": "4fef9dfd7cff45c8ab84eded5014d079",
+  "experiment_name": "framework_step_5_simulation",
+  "last_error": null,
+  "schema_version": 1,
+  "status": "completed",
+  "total_runs": 12,
+  "updated_at": "2026-08-27T16:49:21.837348+00:00"
+}

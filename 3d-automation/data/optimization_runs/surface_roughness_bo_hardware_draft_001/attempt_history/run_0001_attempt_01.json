@@ -1,0 +1,33 @@
+{
+  "action": "retry_same_parameters",
+  "archived_at": "2026-08-29T13:39:34.006267+00:00",
+  "run": {
+    "Ra_um": null,
+    "Rz_um": null,
+    "attempt_number": 1,
+    "cycle_id": null,
+    "error": "The physical cycle used penalty measurements and is not accepted as optimizer training data: QS measurement failed; penalty values were used: QualityStationClientError: QS measurement failed with HTTP 409: {'type': 'invalid_state', 'message': 'CTSTA was accepted, but no measurement movement was detected within 30.0 seconds.'}",
+    "failed_stage": "measurement_penalty",
+    "finished_at": "2026-08-27T17:35:07.915090+00:00",
+    "is_penalty": false,
+    "objective_value": null,
+    "optimizer_iteration": null,
+    "parameters": {
+      "extrusion_multiplier": 1.052,
+      "extrusion_width": 0.459,
+      "fan_speed": 45,
+      "print_speed": 50.9,
+      "temperature": 226,
+      "top_solid_layers": 5
+    },
+    "proposed_at": "2026-08-27T17:17:18.478932+00:00",
+    "run_number": 1,
+    "schema_version": 1,
+    "soft_failure_count": 1,
+    "started_at": "2026-08-27T17:25:01.409914+00:00",
+    "status": "terminal_failed",
+    "strategy": "bayesian",
+    "updated_at": "2026-08-27T17:35:07.915090+00:00"
+  },
+  "schema_version": 1
+}

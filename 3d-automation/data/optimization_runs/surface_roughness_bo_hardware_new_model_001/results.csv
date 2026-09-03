@@ -1,0 +1,13 @@
+run_number,attempt_number,strategy,optimizer_iteration,top_solid_layers,print_speed,extrusion_width,extrusion_multiplier,temperature,fan_speed,objective_value,Ra_um,Rz_um,observation_kind,is_penalty,is_ignored,soft_failure_count,failed_stage,error,cycle_id
+1,1,bayesian,,5,50.9,0.459,1.052,226,45,35.548,35.548,195.749,measured,False,False,0,,,06483e64d67644229f9a438886fea254
+2,1,bayesian,,5,58.1,0.383,1.068,233,38,19.053,19.053,109.766,measured,False,False,0,,,3785295edc9c422eb1f01d8a67a48f7c
+3,1,bayesian,,5,68.5,0.405,1.175,233,53,11.387,11.387,62.537,measured,False,False,0,,,d705468649bf40a6a114b3f0df9fadf5
+4,1,bayesian,,5,77.1,0.481,1.139,217,72,25.486,25.486,157.28,measured,False,False,0,,,ca90d032326040c3984dbac7165ea374
+5,1,bayesian,,5,87.0,0.424,1.08,229,66,27.6,27.6,165.155,measured,False,False,0,,,a20cea434db3429e8cc2de28890d9f0a
+6,2,bayesian,,5,57.2,0.434,1.109,217,62,100.0,,,penalty,True,False,2,measurement_penalty,"The physical cycle produced no valid measurement: QS measurement failed twice; penalty values were used. First error: QualityStationClientError: QS measurement failed with HTTP 409: {'type': 'invalid_state', 'message': 'CTSTA was accepted, but no measurement movement was detected within 30.0 seconds.'}; second error: QualityStationClientError: QS measurement failed with HTTP 409: {'type': 'invalid_state', 'message': 'CTSTA was accepted, but no measurement movement was detected within 30.0 seconds.'}",0c23ed57fa9c4b8c97998065a8b20ec4
+7,1,bayesian,,5,63.0,0.392,1.12,224,58,17.028,17.028,101.545,measured,False,False,0,,,69be6a6307c34530a44fa93b38cd1789
+8,1,bayesian,,5,85.2,0.498,1.193,229,47,24.357,24.357,131.663,measured,False,False,0,,,64889baca7db47a8a9efd6f61fca6b56
+9,2,bayesian,,5,80.3,0.442,1.159,220,31,23.395,23.395,129.135,measured,False,False,1,,,f6077da3532445c19f1874b8ba5329b8
+10,1,bayesian,,5,70.8,0.471,1.151,222,79,20.88,20.88,114.968,measured,False,False,0,,,82ff0a76db7141429f0950af9c6b9e9e
+11,1,bayesian,0,5,76.8,0.4,1.2,235,30,15.325,15.325,70.878,measured,False,False,0,,,ebacfe133845434cb978aa681a43c625
+12,1,bayesian,1,5,90.0,0.456,1.2,235,30,23.69,23.69,122.649,measured,False,False,0,,,23d0ea6071f84cbd8f6c5d708dc57ee0

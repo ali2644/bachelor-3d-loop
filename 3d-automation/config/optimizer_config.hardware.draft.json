@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "experiment_name": "surface_roughness_bo_hardware_draft_001",
+  "total_runs": 12,
+  "seed": 42,
+  "objective": "Ra_um",
+  "warm_start": {
+    "method": "lhs",
+    "sample_count": 10
+  },
+  "strategy": {
+    "name": "bayesian",
+    "options": {
+      "acquisition": "ei",
+      "candidate_count": 4096,
+      "n_restarts_optimizer": 5
+    }
+  },
+  "parameters": [
+    {
+      "name": "print_speed",
+      "lower": 50,
+      "upper": 90
+    },
+    {
+      "name": "extrusion_width",
+      "lower": 0.38,
+      "upper": 0.5
+    },
+    {
+      "name": "extrusion_multiplier",
+      "lower": 1.05,
+      "upper": 1.2
+    },
+    {
+      "name": "temperature",
+      "lower": 215,
+      "upper": 235
+    },
+    {
+      "name": "fan_speed",
+      "lower": 30,
+      "upper": 80
+    }
+  ],
+  "fixed_parameters": {
+    "top_solid_layers": 5
+  },
+  "paths": {
+    "stl": "../data/models/15x15_V2_rounded.stl",
+    "base_profile": "slicer_profile.ini",
+    "output_directory": "../data/optimization_runs/surface_roughness_bo_hardware_draft_001",
+    "history_csvs": []
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "iteration": 0,
+  "last_completed_run": 4,
+  "saved_at": "2026-08-27T16:44:21.663326+00:00",
+  "schema_version": 1,
+  "state": {
+    "acquisition": "ei",
+    "best_objective_value": 3.12862,
+    "framework_batch": {
+      "created_after_completed_runs": 4,
+      "iteration": 0,
+      "proposals": [
+        {
+          "candidate_index": 0,
+          "parameters": {
+            "extrusion_multiplier": 1.086,
+            "extrusion_width": 0.5,
+            "fan_speed": 30,
+            "print_speed": 90.0,
+            "temperature": 235,
+            "top_solid_layers": 5
+          }
+        }
+      ]
+    },
+    "history_size": 4,
+    "proposal_count": 1
+  },
+  "strategy": "bayesian"
+}
