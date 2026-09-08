@@ -107,6 +107,15 @@ def parse_arguments(
         ),
     )
     parser.add_argument(
+        "--resume-interrupted-run",
+        action="store_true",
+        help=(
+            "After confirming that no old process is still controlling the "
+            "plant, archive a run left in 'running' state and prepare the "
+            "same parameters again. Requires --from-run and --preflight-only."
+        ),
+    )
+    parser.add_argument(
         "--acknowledge-failure-streak",
         "--acknowledge-penalty-streak",
         dest="acknowledge_penalty_streak",
@@ -171,7 +180,24 @@ def run_hardware_command(
         if arguments.acknowledge_penalty_streak:
             assert arguments.from_run is not None
             store.acknowledge_penalty_pause(arguments.from_run)
-        if arguments.resume_after_manual_intervention:
+        if arguments.resume_interrupted_run:
+            assert arguments.from_run is not None
+            interrupted = store.load_resume_run(arguments.from_run)
+            if interrupted is None or interrupted.status != "running":
+                raise HardwareCliError(
+                    "The selected run is not saved with status 'running'."
+                )
+            store.mark_manual_stop(
+                interrupted.run_number,
+                error=(
+                    "Operator confirmed that the previous program process "
+                    "was interrupted and the plant was inspected manually."
+                ),
+                failed_stage="process_interrupted",
+                cycle_id=interrupted.cycle_id,
+            )
+            store.prepare_manual_resume(interrupted.run_number)
+        elif arguments.resume_after_manual_intervention:
             assert arguments.from_run is not None
             stopped = store.load_resume_run(arguments.from_run)
             if stopped is None:
@@ -271,6 +297,22 @@ def run_hardware_command(
             "experiment_directory": str(store.directory),
             "completed_in_this_call": len(completed),
             "completed_total": store.state.completed_runs,
+            "last_completed_result": (
+                None
+                if not completed
+                else {
+                    "run_number": completed[-1].run_number,
+                    "attempt_number": completed[-1].attempt_number,
+                    "objective_value": completed[-1].objective_value,
+                    "Ra_um": completed[-1].ra_um,
+                    "Rz_um": completed[-1].rz_um,
+                    "print_time_seconds": (
+                        completed[-1].print_time_seconds
+                    ),
+                    "is_penalty": completed[-1].is_penalty,
+                    "is_ignored": completed[-1].is_ignored,
+                }
+            ),
             "next_run_number": store.next_run_number(),
             "status": store.state.status,
             "consecutive_penalty_runs": (
@@ -320,6 +362,10 @@ def _validate_request(arguments: argparse.Namespace) -> None:
         raise HardwareCliError(
             "--resume-after-manual-intervention requires --resume."
         )
+    if arguments.resume_interrupted_run and not arguments.resume:
+        raise HardwareCliError(
+            "--resume-interrupted-run requires --resume."
+        )
     if arguments.acknowledge_penalty_streak and not arguments.resume:
         raise HardwareCliError(
             "--acknowledge-penalty-streak requires --resume."
@@ -329,17 +375,20 @@ def _validate_request(arguments: argparse.Namespace) -> None:
         for value in (
             arguments.retry_failed,
             arguments.resume_after_manual_intervention,
+            arguments.resume_interrupted_run,
             arguments.acknowledge_penalty_streak,
         )
     )
     if resolution_flags > 1:
         raise HardwareCliError(
             "Use only one of --retry-failed, "
-            "--resume-after-manual-intervention or "
+            "--resume-after-manual-intervention, "
+            "--resume-interrupted-run or "
             "--acknowledge-penalty-streak."
         )
     if (
         arguments.resume_after_manual_intervention
+        or arguments.resume_interrupted_run
         or arguments.acknowledge_penalty_streak
     ) and arguments.from_run is None:
         raise HardwareCliError(
@@ -348,6 +397,7 @@ def _validate_request(arguments: argparse.Namespace) -> None:
         )
     if (
         arguments.resume_after_manual_intervention
+        or arguments.resume_interrupted_run
         or arguments.acknowledge_penalty_streak
     ) and not arguments.preflight_only:
         raise HardwareCliError(

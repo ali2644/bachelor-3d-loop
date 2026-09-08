@@ -4,10 +4,16 @@ __pycache__/
 config/end_to_end.env
 data/results/
 data/generated_profiles/
-data/gcode/cycle_*.gcode
+data/gcode/*.gcode
+data/gcode/*.bgcode
 
 # Generated experiment artifacts
 config/experiment_plans/archive/
 data/camera_images/
 # Generated experiment runs: images, CSV results and logs
 data/experiments/
+data/optimization_runs/
+
+# Local hardware configurations contain machine-specific absolute paths.
+config/optimizer_config.hardware*.json
+local_archive/

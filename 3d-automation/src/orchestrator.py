@@ -125,6 +125,7 @@ class CycleResult:
     gcode_path: Path
     profile_sha256: str
     print_parameters: Mapping[str, str]
+    print_time_seconds: float | None = None
     measurements: Mapping[str, float] = field(default_factory=dict)
     printer_states: tuple[str, ...] = ()
     camera_image_path: str | None = None
@@ -139,6 +140,11 @@ class CycleResult:
             "started_at": self.started_at.isoformat(),
             "finished_at": self.finished_at.isoformat(),
             "duration_seconds": round(self.duration_seconds, 3),
+            "print_time_seconds": (
+                None
+                if self.print_time_seconds is None
+                else round(self.print_time_seconds, 3)
+            ),
             "stl_path": str(self.stl_path),
             "profile_path": str(self.profile_path),
             "gcode_path": str(self.gcode_path),
@@ -329,6 +335,7 @@ class PrintOrchestrator:
         measurements: dict[str, float] = {}
         measurement_error: str | None = None
         camera_image_path: str | None = None
+        print_time_seconds: float | None = None
 
         LOGGER.info(
             "Starting %s cycle %s.",
@@ -375,7 +382,9 @@ class PrintOrchestrator:
                 )
 
                 stage = CycleStage.WAITING_FOR_PRINT
+                print_wait_started = self._monotonic()
                 printer_states = self.wait_until_print_finished()
+                print_time_seconds = self._monotonic() - print_wait_started
 
                 if self.camera_service is not None:
                     stage = CycleStage.CAMERA_CAPTURE
@@ -511,6 +520,7 @@ class PrintOrchestrator:
                 gcode_path=request.gcode_path,
                 profile_sha256=profile_sha256,
                 print_parameters=dict(request.print_parameters),
+                print_time_seconds=print_time_seconds,
                 measurements=measurements,
                 printer_states=printer_states,
                 camera_image_path=camera_image_path,
@@ -557,6 +567,7 @@ class PrintOrchestrator:
                 gcode_path=request.gcode_path,
                 profile_sha256=profile_sha256,
                 print_parameters=dict(request.print_parameters),
+                print_time_seconds=print_time_seconds,
                 measurements=measurements,
                 printer_states=printer_states,
                 camera_image_path=camera_image_path,

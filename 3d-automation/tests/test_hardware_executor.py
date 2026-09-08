@@ -105,6 +105,7 @@ class FakeOrchestrator:
             gcode_path=request.gcode_path,
             profile_sha256="test-sha256",
             print_parameters=request.print_parameters,
+            print_time_seconds=615.25,
             measurements=self.measurements,
             printer_states=("PRINTING", "FINISHED"),
             error=self.result_error,
@@ -168,6 +169,7 @@ class HardwareExecutorTest(unittest.TestCase):
 
         self.assertEqual(completed.ra_um, 4.152)
         self.assertEqual(completed.rz_um, 22.5)
+        self.assertEqual(completed.print_time_seconds, 615.25)
         self.assertEqual(completed.cycle_id, "physical-cycle-1")
         self.assertEqual(len(orchestrator.cycle_requests), 1)
         request = orchestrator.cycle_requests[0]

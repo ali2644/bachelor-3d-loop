@@ -20,8 +20,25 @@ class FakeResult:
 
 
 class MainTest(unittest.TestCase):
+    def test_accepts_every_operating_mode_with_explicit_result_file(
+        self,
+    ) -> None:
+        for mode in ("preflight", "robot-qs", "full", "experiment"):
+            with self.subTest(mode=mode):
+                arguments = main_module.parse_arguments(
+                    [
+                        "--mode",
+                        mode,
+                        "--results-csv",
+                        f"{mode}.csv",
+                    ]
+                )
+                self.assertEqual(arguments.mode, mode)
+
     def test_experiment_mode_defaults_to_first_two_plan_entries(self) -> None:
-        arguments = main_module.parse_arguments(["--mode", "experiment"])
+        arguments = main_module.parse_arguments(
+            ["--mode", "experiment", "--results-csv", "results.csv"]
+        )
 
         self.assertEqual(arguments.mode, "experiment")
         self.assertEqual(arguments.experiment_start_cycle, 1)
@@ -48,6 +65,8 @@ class MainTest(unittest.TestCase):
                                 "experiment",
                                 "--experiment-cycles",
                                 invalid_value,
+                                "--results-csv",
+                                "results.csv",
                             ]
                         )
 
@@ -64,6 +83,8 @@ class MainTest(unittest.TestCase):
                                 "experiment",
                                 "--experiment-start-cycle",
                                 invalid_value,
+                                "--results-csv",
+                                "results.csv",
                             ]
                         )
 
@@ -95,6 +116,8 @@ class MainTest(unittest.TestCase):
                 "experiment",
                 "--experiment-cycles",
                 "2",
+                "--results-csv",
+                "results.csv",
             ]
         )
 
@@ -160,6 +183,8 @@ class MainTest(unittest.TestCase):
                     "--experiment-cycles",
                     "100",
                     "--reuse-experiment-plan",
+                    "--results-csv",
+                    str(Path(temporary_directory) / "results.csv"),
                 ]
             )
 
@@ -191,6 +216,8 @@ class MainTest(unittest.TestCase):
                 "--experiment-cycles",
                 "9",
                 "--reuse-experiment-plan",
+                "--results-csv",
+                "results.csv",
             ]
         )
 
@@ -213,6 +240,8 @@ class MainTest(unittest.TestCase):
                 "experiment",
                 "--temperature",
                 "210",
+                "--results-csv",
+                "results.csv",
             ]
         )
 
@@ -240,7 +269,9 @@ class MainTest(unittest.TestCase):
 
         output = io.StringIO()
         with redirect_stdout(output):
-            exit_code = main_module.main(["--mode", "full"])
+            exit_code = main_module.main(
+                ["--mode", "full", "--results-csv", "results.csv"]
+            )
 
         self.assertEqual(exit_code, 0)
         orchestrator.run_single_print_cycle.assert_called_once_with(request)
@@ -269,6 +300,8 @@ class MainTest(unittest.TestCase):
                     "experiment",
                     "--experiment-cycles",
                     "2",
+                    "--results-csv",
+                    "results.csv",
                 ]
             )
 
@@ -285,6 +318,51 @@ class MainTest(unittest.TestCase):
                 ],
             },
         )
+
+    def test_results_csv_is_required_before_any_mode_can_start(self) -> None:
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                main_module.parse_arguments(["--mode", "preflight"])
+
+    def test_parses_all_single_cycle_operating_arguments(self) -> None:
+        arguments = main_module.parse_arguments(
+            [
+                "--mode",
+                "full",
+                "--stl",
+                "part.stl",
+                "--profile",
+                "profile.ini",
+                "--generated-profiles-dir",
+                "generated",
+                "--gcode",
+                "part.gcode",
+                "--results-csv",
+                "results.csv",
+                "--top-solid-layers",
+                "5",
+                "--print-speed",
+                "70.5",
+                "--extrusion-width",
+                "0.42",
+                "--extrusion-multiplier",
+                "1.1",
+                "--temperature",
+                "225",
+                "--fan-speed",
+                "60",
+            ]
+        )
+
+        self.assertEqual(arguments.mode, "full")
+        self.assertEqual(arguments.stl, Path("part.stl"))
+        self.assertEqual(arguments.profile, Path("profile.ini"))
+        self.assertEqual(arguments.top_solid_layers, 5)
+        self.assertEqual(arguments.print_speed, 70.5)
+        self.assertEqual(arguments.extrusion_width, 0.42)
+        self.assertEqual(arguments.extrusion_multiplier, 1.1)
+        self.assertEqual(arguments.temperature, 225)
+        self.assertEqual(arguments.fan_speed, 60)
 
 
 if __name__ == "__main__":

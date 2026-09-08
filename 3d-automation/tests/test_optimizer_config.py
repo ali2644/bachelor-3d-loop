@@ -99,6 +99,29 @@ class OptimizerConfigTest(unittest.TestCase):
         ):
             load_optimizer_config(self.write_config(raw_config))
 
+    def test_accepts_safe_objective_expression(self) -> None:
+        raw_config = valid_config()
+        raw_config["objective"] = (
+            "5 + print_time_minutes * Ra_um + Rz_um"
+        )
+
+        config = load_optimizer_config(self.write_config(raw_config))
+
+        self.assertEqual(
+            config.objective,
+            "5 + print_time_minutes * Ra_um + Rz_um",
+        )
+
+    def test_rejects_unsafe_objective_expression(self) -> None:
+        raw_config = valid_config()
+        raw_config["objective"] = "__import__('os').system('echo unsafe')"
+
+        with self.assertRaisesRegex(
+            OptimizerConfigError,
+            "Invalid objective",
+        ):
+            load_optimizer_config(self.write_config(raw_config))
+
     def test_accepts_every_strategy_in_the_current_scope(self) -> None:
         strategies = {
             "bayesian": "bayesian",

@@ -91,6 +91,7 @@ class FakeOrchestrator:
             gcode_path=request.gcode_path,
             profile_sha256="test-sha256",
             print_parameters=request.print_parameters,
+            print_time_seconds=615.25,
             measurements={"Ra": 4.25, "Rz": 21.5},
             printer_states=("PRINTING", "FINISHED"),
             error=result_error,
@@ -232,6 +233,25 @@ class HardwareCliTest(unittest.TestCase):
             ).is_file()
         )
 
+    def test_ignore_failure_result_is_persisted_at_experiment_start(
+        self,
+    ) -> None:
+        config_path, output_directory = self.config_path("ignore_mode")
+
+        run_hardware_command(
+            self.arguments(
+                config_path,
+                "--new",
+                "--failure-result",
+                "ignore",
+                "--preflight-only",
+            ),
+            orchestrator_builder=CapturingBuilder(),
+        )
+
+        store = ExperimentStore.open(output_directory)
+        self.assertEqual(store.state.failure_observation_mode, "ignore")
+
     def test_failed_preflight_does_not_consume_physical_attempt(self) -> None:
         config_path, output_directory = self.config_path("preflight_failure")
 
@@ -289,6 +309,10 @@ class HardwareCliTest(unittest.TestCase):
         self.assertEqual(result["completed_in_this_call"], 1)
         self.assertEqual(result["completed_total"], 1)
         self.assertEqual(result["next_run_number"], 2)
+        self.assertEqual(
+            result["last_completed_result"]["print_time_seconds"],
+            615.25,
+        )
         self.assertEqual(len(builder.orchestrators[-1].cycle_requests), 1)
         store = ExperimentStore.open(output_directory)
         completed = store.load_run(1)
@@ -485,6 +509,36 @@ class HardwareCliTest(unittest.TestCase):
                 / "logs/preflight_run_0001_attempt_02.json"
             ).is_file()
         )
+
+    def test_interrupted_running_run_can_be_recovered_after_check(self) -> None:
+        config_path, output_directory = self.config_path("interrupted")
+        builder = CapturingBuilder()
+        run_hardware_command(
+            self.arguments(config_path, "--new", "--preflight-only"),
+            orchestrator_builder=builder,
+        )
+        store = ExperimentStore.open(output_directory)
+        original = store.load_run(1)
+        store.mark_run_started(1)
+
+        result = run_hardware_command(
+            self.arguments(
+                config_path,
+                "--resume",
+                "--from-run",
+                "1",
+                "--resume-interrupted-run",
+                "--preflight-only",
+            ),
+            orchestrator_builder=builder,
+        )
+
+        resumed = ExperimentStore.open(output_directory).load_run(1)
+        self.assertEqual(result["attempt_number"], 2)
+        self.assertEqual(resumed.status, "proposed")
+        self.assertEqual(resumed.parameters, original.parameters)
+        history = list((output_directory / "attempt_history").glob("*.json"))
+        self.assertEqual(len(history), 1)
 
     def test_penalty_pause_acknowledgement_preflights_run_four(self) -> None:
         config_path, output_directory = self.config_path("penalty_pause")
