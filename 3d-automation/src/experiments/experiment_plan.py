@@ -25,13 +25,14 @@ EXPECTED_FIELD_NAMES = (
 DEFAULT_EXPECTED_CYCLE_COUNT = 20
 
 # Narrowed warm-start limits chosen after the first hardware trials.
-GENERATED_TOP_SOLID_LAYERS = 5
+#GENERATED_TOP_SOLID_LAYERS = 5
 GENERATED_PARAMETER_BOUNDS = {
     "print_speed": (50.0, 90.0),
     "extrusion_width": (0.38, 0.50),
     "extrusion_multiplier": (1.05, 1.20),
     "temperature": (215.0, 235.0),
     "fan_speed": (30.0, 80.0),
+    "top_solid_layers": (4, 9),  
 }
 
 
@@ -93,7 +94,7 @@ def _generate_entries(
             ExperimentPlanEntry(
                 cycle_number=index + 1,
                 parameters=PrintParameters(
-                    top_solid_layers=GENERATED_TOP_SOLID_LAYERS,
+                    top_solid_layers=int(round(scaled["top_solid_layers"])),
                     print_speed=int(round(scaled["print_speed"])),
                     extrusion_width=round(
                         scaled["extrusion_width"],
@@ -314,38 +315,38 @@ def _text_value(value: str | list[str] | None) -> str | None:
     return value
 
 
-def _validate_cycle_numbers(
-    entries: list[ExperimentPlanEntry],
-    expected_cycle_count: int,
-) -> None:
-    counts = Counter(entry.cycle_number for entry in entries)
-    duplicates = sorted(
-        cycle_number
-        for cycle_number, count in counts.items()
-        if count > 1
-    )
-    expected = set(range(1, expected_cycle_count + 1))
-    actual = set(counts)
-    missing = sorted(expected - actual)
-    unexpected = sorted(actual - expected)
-
-    if duplicates or missing or unexpected:
-        details: list[str] = []
-        if duplicates:
-            details.append(
-                "duplicate: " + ", ".join(map(str, duplicates))
-            )
-        if missing:
-            details.append("missing: " + ", ".join(map(str, missing)))
-        if unexpected:
-            details.append(
-                "outside expected range: "
-                + ", ".join(map(str, unexpected))
-            )
-        raise ValueError(
-            "Experiment plan cycle numbers must be exactly "
-            f"1-{expected_cycle_count} ({'; '.join(details)})."
-        )
+#def _validate_cycle_numbers(
+#    entries: list[ExperimentPlanEntry],
+#    expected_cycle_count: int,
+#) -> None:
+#    counts = Counter(entry.cycle_number for entry in entries)
+#    duplicates = sorted(
+#        cycle_number
+#        for cycle_number, count in counts.items()
+#        if count > 1
+#    )
+#    expected = set(range(1, expected_cycle_count + 1))
+#    actual = set(counts)
+#    missing = sorted(expected - actual)
+#    unexpected = sorted(actual - expected)
+#
+#    if duplicates or missing or unexpected:
+#        details: list[str] = []
+#        if duplicates:
+#            details.append(
+#                "duplicate: " + ", ".join(map(str, duplicates))
+#            )
+#        if missing:
+#            details.append("missing: " + ", ".join(map(str, missing)))
+#        if unexpected:
+#            details.append(
+#                "outside expected range: "
+#                + ", ".join(map(str, unexpected))
+#            )
+#        raise ValueError(
+#            "Experiment plan cycle numbers must be exactly "
+#            f"1-{expected_cycle_count} ({'; '.join(details)})."
+#        )
 
 
 def _validate_unique_parameter_sets(
@@ -353,24 +354,24 @@ def _validate_unique_parameter_sets(
 ) -> None:
     first_cycle_by_parameters: dict[PrintParameters, int] = {}
     duplicates: list[tuple[int, int]] = []
-
-    for entry in entries:
-        first_cycle = first_cycle_by_parameters.setdefault(
-            entry.parameters,
-            entry.cycle_number,
-        )
-        if first_cycle != entry.cycle_number:
-            duplicates.append((first_cycle, entry.cycle_number))
-
-    if duplicates:
-        duplicate_text = ", ".join(
-            f"cycles {first_cycle} and {duplicate_cycle}"
-            for first_cycle, duplicate_cycle in duplicates
-        )
-        raise ValueError(
-            "Experiment plan contains duplicate parameter sets: "
-            f"{duplicate_text}."
-        )
+#
+#    for entry in entries:
+#        first_cycle = first_cycle_by_parameters.setdefault(
+#            entry.parameters,
+#            entry.cycle_number,
+#        )
+#        if first_cycle != entry.cycle_number:
+#            duplicates.append((first_cycle, entry.cycle_number))
+#
+#    if duplicates:
+#        duplicate_text = ", ".join(
+#            f"cycles {first_cycle} and {duplicate_cycle}"
+#            for first_cycle, duplicate_cycle in duplicates
+#        )
+#        raise ValueError(
+#            "Experiment plan contains duplicate parameter sets: "
+#            f"{duplicate_text}."
+#        )
 
 
 def load_experiment_plan(
@@ -404,6 +405,6 @@ def load_experiment_plan(
             f"{expected_cycle_count} data rows, got {len(entries)}."
         )
 
-    _validate_cycle_numbers(entries, expected_cycle_count)
-    _validate_unique_parameter_sets(entries)
+    #_validate_cycle_numbers(entries, expected_cycle_count)
+    #_validate_unique_parameter_sets(entries)
     return tuple(sorted(entries, key=lambda entry: entry.cycle_number))

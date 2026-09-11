@@ -45,6 +45,8 @@ class PrinterServiceProtocol(Protocol):
     def get_printer_state(self) -> str | None: ...
 
 
+
+
 class RobotServiceProtocol(Protocol):
     def check_connection(self) -> None: ...
 
@@ -217,6 +219,7 @@ class PrintOrchestrator:
 
         self._sleep = sleep
         self._monotonic = monotonic
+        self._last_cycle_had_penalty = False # new
 
     def run_preflight(
         self,
@@ -373,6 +376,21 @@ class PrintOrchestrator:
                     "the upload.",
                     cycle_id,
                 )
+                ##############################################################
+                with self.robot_service_factory() as robot_service:
+                    robot_service.initialize()
+                    robot_service.complete_part_handling_after_measurement()
+
+                    ###############################################################
+                    if self._last_cycle_had_penalty:
+                        LOGGER.info(
+                            "Cycle %s: had penalty running QS recovery procedure.",
+                            cycle_id,
+                        )
+                        robot_service.recover_after_final_push_collision()
+                        self._last_cycle_had_penalty = False # reset flag
+                    ###############################################################
+                ###############################################################
 
                 stage = CycleStage.WAITING_FOR_PRINT
                 printer_states = self.wait_until_print_finished()
@@ -405,13 +423,13 @@ class PrintOrchestrator:
                     )
 
                 stage = CycleStage.COOLING
-                if self.cooling_time_seconds > 0:
-                    LOGGER.info(
-                        "Cycle %s: waiting %.1f seconds before handling.",
-                        cycle_id,
-                        self.cooling_time_seconds,
-                    )
-                    self._sleep(self.cooling_time_seconds)
+                #if self.cooling_time_seconds > 0:
+                    #LOGGER.info(
+                        #"Cycle %s: waiting %.1f seconds before handling.",
+                        #cycle_id,
+                        #self.cooling_time_seconds,
+                    #)
+                    #self._sleep(self.cooling_time_seconds)
 
             stage = CycleStage.ROBOT_HANDLING
             LOGGER.info("Cycle %s: starting robot handling.", cycle_id)
@@ -430,6 +448,7 @@ class PrintOrchestrator:
                     )
 
                 else:
+                    robot_service.open_gripper()
                     stage = CycleStage.MEASURING
                     LOGGER.info(
                         "Cycle %s: part is under the probe; starting QS "
@@ -437,65 +456,211 @@ class PrintOrchestrator:
                         cycle_id,
                     )
 
-                    try:
-                        measurements = self._validate_measurements(
-                            self.quality_station.measure()
-                        )
+                    stage = CycleStage.MEASURING
+                    LOGGER.info(
+                        "Cycle %s: part is under the probe; starting QS "
+                        "measurement.",
+                        cycle_id,
+                    )
 
-                    except Exception as first_error:
-                        LOGGER.warning(
-                            "Cycle %s: first QS measurement failed. "
-                            "Starting exactly one additional measurement.",
-                            cycle_id,
-                            exc_info=True,
-                        )
+                    #####################################################################
+                    #mittelwertmessung
+                    ZIEL_ERFOLGE = 1      # <-- Ihr X: Wie viele ERFOLGREICHE Messungen Sie wollen
+                    MAX_VERSUCHE_GESAMT = 3  # <-- Ihr Y: Wie viele Messungen INSGESAMT maximal durchgeführt werden (Y muss >= X sein)
+                    PAUSE_SEKUNDEN = 5.0  # <-- Sekunden zwischen den Versuchen
+
+                    erfolgreiche_ra_werte = []
+                    erfolgreiche_rz_werte = []
+                    total_attempts = 0
+                    last_exception: Exception | None = None
+
+                    # Schleife läuft, bis X Erfolge da sind ODER insgesamt Y-mal versucht wurde
+                    while len(erfolgreiche_ra_werte) < ZIEL_ERFOLGE and total_attempts < MAX_VERSUCHE_GESAMT:
+                        total_attempts += 1
+                        
+                        # Pause vor jedem weiteren Versuch (ab dem 2. Versuch)
+                        if total_attempts > 1:
+                            self._sleep(PAUSE_SEKUNDEN)
 
                         try:
-                            measurements = self._validate_measurements(
+                            einzel_messung = self._validate_measurements(
                                 self.quality_station.measure()
                             )
-                        except Exception as second_error:
-                            measurement_error = (
-                                "QS measurement failed twice; penalty "
-                                "values were used. First error: "
-                                f"{type(first_error).__name__}: "
-                                f"{first_error}; second error: "
-                                f"{type(second_error).__name__}: "
-                                f"{second_error}"
-                            )
-                            measurements = {
-                                parameter: self.MEASUREMENT_PENALTY_VALUE
-                                for parameter in self.REQUIRED_MEASUREMENTS
-                            }
-                            LOGGER.warning(
-                                "Cycle %s: second QS measurement also "
-                                "failed. Saving temporary penalty values "
-                                "Ra=%.1f um and Rz=%.1f um.",
+                            
+                            erfolgreiche_ra_werte.append(einzel_messung["Ra"])
+                            erfolgreiche_rz_werte.append(einzel_messung["Rz"])
+
+                            LOGGER.info(
+                                "Cycle %s: QS measurement succeeded (Success %d/%d, Attempt %d/%d); Ra=%s um, Rz=%s um.",
                                 cycle_id,
-                                measurements["Ra"],
-                                measurements["Rz"],
+                                len(erfolgreiche_ra_werte),
+                                ZIEL_ERFOLGE,
+                                total_attempts,
+                                MAX_VERSUCHE_GESAMT,
+                                einzel_messung["Ra"],
+                                einzel_messung["Rz"],
+                            )
+                        except Exception as error:
+                            last_exception = error
+                            LOGGER.warning(
+                                "Cycle %s: QS measurement failed (Attempt %d/%d).",
+                                cycle_id,
+                                total_attempts,
+                                MAX_VERSUCHE_GESAMT,
                                 exc_info=True,
                             )
-                        else:
-                            LOGGER.info(
-                                "Cycle %s: second QS measurement succeeded; "
-                                "Ra=%s um, Rz=%s um.",
-                                cycle_id,
-                                measurements["Ra"],
-                                measurements["Rz"],
-                            )
 
-                    else:
+                    # --- Auswertung nach Beendigung der Schleife ---
+                    if erfolgreiche_ra_werte:
+                        # Mittelwert aus allen erfolgreichen Werten berechnen (können auch weniger als X sein, falls Limit Y griff)
+                        measurements = {
+                            "Ra": sum(erfolgreiche_ra_werte) / len(erfolgreiche_ra_werte),
+                            "Rz": sum(erfolgreiche_rz_werte) / len(erfolgreiche_rz_werte)
+                        }
                         LOGGER.info(
-                            "Cycle %s: QS measurement completed; Ra=%s um, "
-                            "Rz=%s um.",
+                            "Cycle %s: QS measurement finished. Average calculated from %d successful measurements (Total attempts: %d/%d): Ra=%s um, Rz=%s um.",
                             cycle_id,
+                            len(erfolgreiche_ra_werte),
+                            total_attempts,
+                            MAX_VERSUCHE_GESAMT,
+                            measurements["Ra"],
+                            measurements["Rz"],
+                        )
+                    else:
+                        # Penalty greift NUR, wenn von allen Y Versuchen kein einziger erfolgreich war
+                        measurement_error = (
+                            f"QS measurement failed. All {total_attempts} attempts resulted in errors. "
+                            f"Last error: {type(last_exception).__name__}: {last_exception}"
+                        )
+                        measurements = {
+                            parameter: self.MEASUREMENT_PENALTY_VALUE
+                            for parameter in self.REQUIRED_MEASUREMENTS
+                        }
+                        LOGGER.warning(
+                            "Cycle %s: No QS measurement succeeded after reaching total limit of %d attempts. Saving temporary penalty values "
+                            "Ra=%.1f um and Rz=%.1f um.",
+                            cycle_id,
+                            MAX_VERSUCHE_GESAMT,
                             measurements["Ra"],
                             measurements["Rz"],
                         )
 
-                    stage = CycleStage.ROBOT_HANDLING
-                    robot_service.complete_part_handling_after_measurement()
+
+                    #####################################################################
+                    #keine mittelwert messung
+                    #MAX_RETRIES = 5  # <-- ÄNDERN SIE DIESE ZAHL NACH IHREN WÜNSCHEN
+                    #total_allowed_attempts = 1 + MAX_RETRIES
+                    #last_exception: Exception | None = None
+
+                    #for attempt in range(1, total_allowed_attempts + 1):
+                    #    try:
+                    #        measurements = self._validate_measurements(
+                    #            self.quality_station.measure()
+                    #        )
+                    #        LOGGER.info(
+                    #            "Cycle %s: QS measurement completed successfully on attempt %d/%d; Ra=%s um, Rz=%s um.",
+                    #            cycle_id,
+                    #            attempt,
+                    #            total_allowed_attempts,
+                    #           measurements["Ra"],
+                    #            measurements["Rz"],
+                    #        )
+                    # #       break
+                    #    except Exception as error:
+                    #        last_exception = error
+                    #        LOGGER.warning(
+                    #            "Cycle %s: QS measurement attempt %d/%d failed.",
+                    #            cycle_id,
+                    #            attempt,
+                    #            total_allowed_attempts,
+                    #            exc_info=True,
+                    #        )
+                    #        self._sleep(5)  # Optional: kurze Pause zwischen den Versuchen
+                    #else:
+                    #    # Wird nur ausgeführt, wenn alle Versuche fehlgeschlagen sind (kein break)
+                    #    measurement_error = (
+                    #        f"QS measurement failed after {total_allowed_attempts} attempts. "
+                    #        f"Last error: {type(last_exception).__name__}: {last_exception}"
+                    #    )
+                    #    measurements = {
+                    #        parameter: self.MEASUREMENT_PENALTY_VALUE
+                    #        for parameter in self.REQUIRED_MEASUREMENTS
+                    #    }
+                    #    LOGGER.warning(
+                    #        "Cycle %s: All QS measurement attempts failed. Saving temporary penalty values "
+                    #        "Ra=%.1f um and Rz=%.1f um.",
+                    #        cycle_id,
+                    #        measurements["Ra"],
+                    #        measurements["Rz"],
+                    #    )
+
+                    ##############################################################################################    
+                    #try:
+                    #    measurements = self._validate_measurements(
+                    #        self.quality_station.measure()
+                    #    )
+
+                    #except Exception as first_error:
+                    #    LOGGER.warning(
+                    #        "Cycle %s: first QS measurement failed. "
+                    #        "Starting exactly one additional measurement.",
+                    #        cycle_id,
+                    #        exc_info=True,
+                    #    )
+
+                    #    try:
+                    #        measurements = self._validate_measurements(
+                    #            self.quality_station.measure()
+                    #        )
+                    #    except Exception as second_error:
+                    #        measurement_error = (
+                    #            "QS measurement failed twice; penalty "
+                    #            "values were used. First error: "
+                    #            f"{type(first_error).__name__}: "
+                    #            f"{first_error}; second error: "
+                    #            f"{type(second_error).__name__}: "
+                    #            f"{second_error}"
+                    #        )
+                    #        measurements = {
+                    #            parameter: self.MEASUREMENT_PENALTY_VALUE
+                    #            for parameter in self.REQUIRED_MEASUREMENTS
+                    #        }
+                    #        LOGGER.warning(
+                    #            "Cycle %s: second QS measurement also "
+                    #            "failed. Saving temporary penalty values "
+                    #            "Ra=%.1f um and Rz=%.1f um.",
+                    #            cycle_id,
+                    #            measurements["Ra"],
+                    #            measurements["Rz"],
+                    #            exc_info=True,
+                    #        )
+                    #    else:
+                    #        LOGGER.info(
+                    #            "Cycle %s: second QS measurement succeeded; "
+                    #            "Ra=%s um, Rz=%s um.",
+                    #            cycle_id,
+                    #            measurements["Ra"],
+                    #            measurements["Rz"],
+                    #        )
+
+                    #else:
+                    #    LOGGER.info(
+                    #        "Cycle %s: QS measurement completed; Ra=%s um, "
+                    #        "Rz=%s um.",
+                    #        cycle_id,
+                    #        measurements["Ra"],
+                    #        measurements["Rz"],
+                    #    )
+
+                    ################################################################
+                    self._last_cycle_had_penalty = any(
+                        value == self.MEASUREMENT_PENALTY_VALUE
+                        for value in measurements.values()
+                    )
+                    ################################################################
+
+                    #stage = CycleStage.ROBOT_HANDLING
+                    #robot_service.complete_part_handling_after_measurement()
 
             finished_at = datetime.now(timezone.utc)
             result = CycleResult(

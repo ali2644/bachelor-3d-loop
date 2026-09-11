@@ -41,10 +41,14 @@
       "name": "fan_speed",
       "lower": 30,
       "upper": 80
+    },
+    {
+      "name": "top_solid_layers",
+      "lower": 4,
+      "upper": 8
     }
   ],
   "fixed_parameters": {
-    "top_solid_layers": 5
   },
   "paths": {
     "stl": "../data/models/15x15_V2_rounded.stl",

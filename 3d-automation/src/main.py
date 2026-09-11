@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import os
+from push import send_push_notification
 from functools import partial
 from pathlib import Path
 from typing import Sequence
@@ -33,7 +34,29 @@ EXPERIMENT_PLAN_PATH = (
 )
 MAX_EXPERIMENT_CYCLES = 100
 
+########################################################################
+class NtfyHandler(logging.Handler):
+    def emit(self, record):
+        try:
+            # Drop everything below WARNING
+            if record.levelno < logging.WARNING:
+                return
+            
+            # If it's a WARNING, only proceed if it mentions a penalty value
+            if record.levelno == logging.WARNING and "completed with measurement penalty" not in record.getMessage().lower():
+                return
 
+            send_push_notification(
+                title=f"{record.levelname} | {record.name}",
+                message=self.format(record),
+                priority=5 if record.levelno >= logging.ERROR else 4,
+            )
+
+        except Exception:
+            # never let notification failures break the application
+            pass
+
+########################################################################
 def experiment_cycle_count(raw_value: str) -> int:
     try:
         value = int(raw_value)
@@ -278,7 +301,7 @@ def build_orchestrator(
             os.getenv("MAX_STATUS_ERRORS", "5")
         ),
         cooling_time_seconds=float(
-            os.getenv("PART_COOLING_SECONDS", "60")
+            os.getenv("PART_COOLING_SECONDS", "0")#60
         ),
     )
 
@@ -414,6 +437,18 @@ def main(arguments: Sequence[str] | None = None) -> int:
         level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     )
+    #######################################################################
+    ntfy_handler = NtfyHandler()
+    ntfy_handler.setLevel(logging.WARNING)
+
+    ntfy_handler.setFormatter(
+        logging.Formatter(
+            "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+        )
+    )
+    #######################################################################
+    logging.getLogger().addHandler(ntfy_handler)
+
     parsed_arguments = parse_arguments(arguments)
 
     try:

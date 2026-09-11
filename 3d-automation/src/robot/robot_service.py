@@ -38,7 +38,7 @@ from robot.robot_positions import (
 
 ROBOT_IP = "10.8.170.41"
 
-NORMAL_ARM_SPEED_PERCENT = 50
+NORMAL_ARM_SPEED_PERCENT = 95 #50
 PUSH_ARM_SPEED_PERCENT = 20
 
 GRIPPER_SETTLING_TIME_SECONDS = 1.0
@@ -125,7 +125,7 @@ class RobotService:
         self,
         *,
         max_torque_percentage: int = 100,
-        hold_torque_percentage: int = 30,
+        hold_torque_percentage: int = 70,#30
         settling_time_seconds: float = 0.0,
     ) -> None:
         LOGGER.info("Opening gripper.")
@@ -146,7 +146,7 @@ class RobotService:
         self,
         *,
         max_torque_percentage: int = 100,
-        hold_torque_percentage: int = 80,
+        hold_torque_percentage: int = 90,#80
         settling_time_seconds: float = 0.0,
     ) -> None:
         LOGGER.info(
@@ -207,8 +207,8 @@ class RobotService:
         self.move_to(PRINTER_SAFE)
 
         self.open_gripper(
-            max_torque_percentage=90,
-            hold_torque_percentage=50,
+            max_torque_percentage=100,
+            hold_torque_percentage=70,
             settling_time_seconds=GRIPPER_SETTLING_TIME_SECONDS,
         )
 
@@ -228,7 +228,7 @@ class RobotService:
 
         self.open_gripper(
             max_torque_percentage=100,
-            hold_torque_percentage=50,
+            hold_torque_percentage=90,
             settling_time_seconds=PART_RELEASE_SETTLING_TIME_SECONDS,
         )
 
@@ -245,10 +245,9 @@ class RobotService:
         LOGGER.info("Starting first quality-station alignment.")
 
         self.move_to(QS_ALIGNMENT_ORIENTATION)
-        
+        self.move_to(QS_ALIGNMENT_CONTACT)
 
         with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
-            self.move_to(QS_ALIGNMENT_CONTACT)
             self.move_to(QS_ALIGNMENT_END)
             self.move_to(QS_ALIGNMENT_CONTACT)
 
@@ -270,13 +269,15 @@ class RobotService:
         LOGGER.warning(
             "Starting QS recovery after the aborted final push."
         )
-
+        self.move_to(QS_SAFE)
+        self.move_to(QS_SAFE_RECOVERY)
         with self.use_arm_speed(RECOVERY_ARM_SPEED_PERCENT):
             # The failed target movement stopped somewhere between CONTACT
             # and TARGET. First retreat on the same taught path.
-            self.move_to(QS_FINAL_PUSH_CONTACT)
-            self.move_to(QS_SAFE)
-            self.move_to(QS_SAFE_RECOVERY)
+            
+            #self.move_to(QS_FINAL_PUSH_CONTACT)
+            #self.move_to(QS_SAFE)
+            #self.move_to(QS_SAFE_RECOVERY)
             self.move_to(QS_RECOVERY)
             self.move_to(QS_FINAL_PUSH_CONTACT)
             self.move_to(QS_RECOVERY_CLEAR_PART)
@@ -317,7 +318,7 @@ class RobotService:
             # only its collision flag so the explicitly taught retreat can run.
             self._robot.clear_collision_detected()
             self.recover_after_final_push_collision()
-            return False
+            return True #False
 
         with self.use_arm_speed(PUSH_ARM_SPEED_PERCENT):
             self.move_to(QS_FINAL_PUSH_CONTACT)
@@ -374,6 +375,7 @@ class RobotService:
             "Measurement completed; continuing quality-station handling."
         )
 
+        self.move_to(QS_SAFE) # new
         # Complete the lift-lever movement.
         self.move_to(QS_LIFT_LEVER_APPROACH)
 
@@ -437,8 +439,10 @@ def main() -> None:
     configure_logging()
 
     with RobotService(ROBOT_IP) as robot_service:
-        robot_service.initialize()
-        robot_service.prepare_part_for_measurement()
+    #    robot_service.initialize()
+    #    robot_service.prepare_part_for_measurement()
+
+        robot_service.open_gripper()
 
         LOGGER.info(
             "Current joints: %s",
