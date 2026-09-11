@@ -193,6 +193,7 @@ class RunRecord:
     objective_value: float | None
     ra_um: float | None
     rz_um: float | None
+    print_time_seconds: float | None
     is_penalty: bool
     is_ignored: bool
     soft_failure_count: int
@@ -216,6 +217,7 @@ class RunRecord:
             "objective_value": self.objective_value,
             "Ra_um": self.ra_um,
             "Rz_um": self.rz_um,
+            "print_time_seconds": self.print_time_seconds,
             "is_penalty": self.is_penalty,
             "is_ignored": self.is_ignored,
             "soft_failure_count": self.soft_failure_count,
@@ -287,6 +289,10 @@ class RunRecord:
             objective_value=objective_value,
             ra_um=ra_um,
             rz_um=_optional_number(value, "Rz_um"),
+            print_time_seconds=_optional_number(
+                value,
+                "print_time_seconds",
+            ),
             is_penalty=_optional_bool_with_default(
                 value,
                 "is_penalty",
@@ -332,6 +338,11 @@ class RunRecord:
                 raise ExperimentStoreError(
                     f"Penalty run in {label} must not claim measured Ra/Rz."
                 )
+            if record.print_time_seconds is not None:
+                raise ExperimentStoreError(
+                    f"Penalty run in {label} must not claim a measured "
+                    "print time."
+                )
         if record.is_ignored:
             if record.status != "completed":
                 raise ExperimentStoreError(
@@ -344,6 +355,11 @@ class RunRecord:
             if record.ra_um is not None or record.rz_um is not None:
                 raise ExperimentStoreError(
                     f"Ignored run in {label} must not claim measured Ra/Rz."
+                )
+            if record.print_time_seconds is not None:
+                raise ExperimentStoreError(
+                    f"Ignored run in {label} must not claim a measured "
+                    "print time."
                 )
         if record.is_penalty and record.is_ignored:
             raise ExperimentStoreError(
@@ -574,6 +590,7 @@ class ExperimentStore:
             objective_value=None,
             ra_um=None,
             rz_um=None,
+            print_time_seconds=None,
             is_penalty=False,
             is_ignored=False,
             soft_failure_count=0,
@@ -614,6 +631,7 @@ class ExperimentStore:
         objective_value: float,
         ra_um: float | None,
         rz_um: float | None,
+        print_time_seconds: float | None = None,
         cycle_id: str | None = None,
     ) -> RunRecord:
         """Persist a successful physical result before advancing."""
@@ -634,6 +652,10 @@ class ExperimentStore:
             ),
             ra_um=_finite_optional_number(ra_um, "ra_um"),
             rz_um=_finite_optional_number(rz_um, "rz_um"),
+            print_time_seconds=_finite_optional_number(
+                print_time_seconds,
+                "print_time_seconds",
+            ),
             is_penalty=False,
             is_ignored=False,
             failed_stage=None,
@@ -671,6 +693,7 @@ class ExperimentStore:
             objective_value=None,
             ra_um=None,
             rz_um=None,
+            print_time_seconds=None,
             is_penalty=False,
             is_ignored=False,
             started_at=None,
@@ -729,6 +752,7 @@ class ExperimentStore:
             objective_value=None,
             ra_um=None,
             rz_um=None,
+            print_time_seconds=None,
             is_penalty=False,
             is_ignored=False,
             soft_failure_count=next_soft_failure_count,
@@ -761,6 +785,7 @@ class ExperimentStore:
             objective_value=(penalty if use_penalty_for_optimizer else None),
             ra_um=None,
             rz_um=None,
+            print_time_seconds=None,
             is_penalty=use_penalty_for_optimizer,
             is_ignored=not use_penalty_for_optimizer,
             updated_at=_utc_timestamp(),
@@ -825,6 +850,7 @@ class ExperimentStore:
             objective_value=None,
             ra_um=None,
             rz_um=None,
+            print_time_seconds=None,
             is_penalty=False,
             is_ignored=False,
             soft_failure_count=soft_failure_count,
@@ -862,6 +888,7 @@ class ExperimentStore:
             objective_value=None,
             ra_um=None,
             rz_um=None,
+            print_time_seconds=None,
             is_penalty=False,
             is_ignored=False,
             failed_stage=_clean_optional_text(
@@ -896,6 +923,7 @@ class ExperimentStore:
             objective_value=None,
             ra_um=None,
             rz_um=None,
+            print_time_seconds=None,
             is_penalty=False,
             is_ignored=False,
             failed_stage=None,

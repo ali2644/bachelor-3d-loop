@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import os
+import uuid
 from pathlib import Path
 from typing import Iterable
 
@@ -60,6 +61,7 @@ class CsvCycleRecorder:
         "started_at",
         "finished_at",
         "duration_seconds",
+        "print_time_seconds",
         "stl_path",
         "profile_path",
         "profile_sha256",
@@ -82,6 +84,15 @@ class CsvCycleRecorder:
             *self.BASE_FIELD_NAMES,
             *(f"parameter_{name}" for name in self.parameter_names),
         )
+
+    def validate_destination(self) -> None:
+        """Reject an incompatible existing result file before hardware runs."""
+        if self.csv_path.exists() and not self.csv_path.is_file():
+            raise ValueError(
+                f"Cycle result path is not a file: {self.csv_path}"
+            )
+        if self.csv_path.is_file() and self.csv_path.stat().st_size > 0:
+            self._validate_existing_header()
 
     def record(self, result: CycleResult) -> None:
         self.csv_path.parent.mkdir(
@@ -109,6 +120,11 @@ class CsvCycleRecorder:
             "started_at": result.started_at.isoformat(),
             "finished_at": result.finished_at.isoformat(),
             "duration_seconds": round(result.duration_seconds, 3),
+            "print_time_seconds": (
+                ""
+                if result.print_time_seconds is None
+                else round(result.print_time_seconds, 3)
+            ),
             "stl_path": str(result.stl_path),
             "profile_path": str(result.profile_path),
             "profile_sha256": result.profile_sha256,
@@ -150,9 +166,61 @@ class CsvCycleRecorder:
             reader = csv.reader(stream)
             existing_header = next(reader, [])
 
-        if existing_header != list(self.field_names):
-            raise ValueError(
-                "Existing cycle CSV has a different schema. "
-                f"Expected {list(self.field_names)!r}, "
-                f"got {existing_header!r}."
-            )
+        if existing_header == list(self.field_names):
+            return
+
+        legacy_field_names = tuple(
+            name
+            for name in self.field_names
+            if name != "print_time_seconds"
+        )
+        if existing_header == list(legacy_field_names):
+            self._add_empty_print_time_column(legacy_field_names)
+            return
+
+        raise ValueError(
+            "Existing cycle CSV has a different schema. "
+            "Choose a new --results-csv file for the new series. "
+            f"Expected {list(self.field_names)!r}, "
+            f"got {existing_header!r}."
+        )
+
+    def _add_empty_print_time_column(
+        self,
+        legacy_field_names: tuple[str, ...],
+    ) -> None:
+        """Upgrade only the immediately preceding known CSV schema."""
+        with self.csv_path.open(
+            "r",
+            encoding="utf-8",
+            newline="",
+        ) as stream:
+            rows = list(csv.DictReader(stream))
+
+        temporary_path = self.csv_path.with_name(
+            f".{self.csv_path.name}.{uuid.uuid4().hex}.tmp"
+        )
+        try:
+            with temporary_path.open(
+                "x",
+                encoding="utf-8",
+                newline="",
+            ) as stream:
+                writer = csv.DictWriter(
+                    stream,
+                    fieldnames=self.field_names,
+                    quoting=csv.QUOTE_ALL,
+                )
+                writer.writeheader()
+                for row in rows:
+                    normalized = {
+                        name: row.get(name, "")
+                        for name in legacy_field_names
+                    }
+                    normalized["print_time_seconds"] = ""
+                    writer.writerow(normalized)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary_path, self.csv_path)
+        finally:
+            temporary_path.unlink(missing_ok=True)

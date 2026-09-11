@@ -203,6 +203,7 @@ class PrintOrchestratorTest(unittest.TestCase):
 
         self.assertEqual(result.status, CycleStatus.COMPLETED)
         self.assertEqual(result.measurements["Ra"], 4.152)
+        self.assertIsNotNone(result.print_time_seconds)
         self.assertEqual(
             result.printer_states,
             ("FINISHED", "PRINTING", "FINISHED"),

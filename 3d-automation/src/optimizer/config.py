@@ -8,9 +8,13 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Mapping, Sequence
 
+from optimizer.objective import (
+    ObjectiveExpressionError,
+    validate_objective_expression,
+)
+
 
 CONFIG_SCHEMA_VERSION = 1
-SUPPORTED_OBJECTIVE = "Ra_um"
 SUPPORTED_WARM_START_METHODS = frozenset({"lhs", "random", "sobol"})
 
 STRATEGY_ALIASES = {
@@ -250,10 +254,12 @@ def load_optimizer_config(path: str | Path) -> OptimizerConfig:
     total_runs = _require_int(root, "total_runs", minimum=1)
     seed = _require_int(root, "seed", minimum=0)
     objective = _require_text(root, "objective")
-    if objective != SUPPORTED_OBJECTIVE:
+    try:
+        validate_objective_expression(objective)
+    except ObjectiveExpressionError as error:
         raise OptimizerConfigError(
-            f"objective must currently be {SUPPORTED_OBJECTIVE!r}."
-        )
+            f"Invalid objective: {error}"
+        ) from error
 
     warm_start = _parse_warm_start(root.get("warm_start"))
     strategy = _parse_strategy(root.get("strategy"))

@@ -192,6 +192,7 @@ class OrchestratorRunExecutor:
             ra_um=ra_um,
             rz_um=rz_um,
             cycle_id=result.cycle_id,
+            print_time_seconds=result.print_time_seconds,
         )
 
     def _classified_cycle_error(

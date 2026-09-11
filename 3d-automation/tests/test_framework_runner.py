@@ -196,6 +196,32 @@ class FrameworkRunnerTest(unittest.TestCase):
             )
         )
 
+    def test_objective_expression_uses_all_recorded_metrics(self) -> None:
+        output_directory = self.root / "formula" / "bayesian"
+        payload = config_payload(
+            output_directory,
+            "bayesian",
+            total_runs=5,
+        )
+        payload["objective"] = (
+            "5 + print_time_minutes * Ra_um + Rz_um"
+        )
+        path = self.root / "formula.json"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        config = load_optimizer_config(path)
+
+        completed = self.runner(config).run(max_runs=1)[0]
+
+        assert completed.ra_um is not None
+        assert completed.rz_um is not None
+        assert completed.print_time_seconds is not None
+        expected = (
+            5
+            + (completed.print_time_seconds / 60.0) * completed.ra_um
+            + completed.rz_um
+        )
+        self.assertAlmostEqual(completed.objective_value, expected)
+
     def test_batch_is_checkpointed_before_first_main_run(self) -> None:
         config = self.config("pso", total_runs=8)
         runner = self.runner(config)

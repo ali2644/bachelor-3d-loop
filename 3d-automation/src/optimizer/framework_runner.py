@@ -17,6 +17,10 @@ from optimizer.experiment_store import (
     RunRecord,
     StrategyCheckpoint,
 )
+from optimizer.objective import (
+    ObjectiveExpressionError,
+    evaluate_objective_expression,
+)
 from optimizer.strategies import (
     ProposalBatch,
     StrategyProposal,
@@ -86,6 +90,7 @@ class ExecutionResult:
     ra_um: float
     rz_um: float | None = None
     cycle_id: str | None = None
+    print_time_seconds: float | None = None
 
 
 class RunExecutor(Protocol):
@@ -121,9 +126,14 @@ class SyntheticSurfaceExecutor:
             squared_distances
         )
         ra_um = round(ra_um, 6)
+        print_time_seconds = round(
+            1200.0 * 70.0 / float(run.parameters["print_speed"]),
+            6,
+        )
         return ExecutionResult(
             ra_um=ra_um,
             rz_um=round(ra_um * 5.2, 6),
+            print_time_seconds=print_time_seconds,
             cycle_id=(
                 f"simulation-run-{run.run_number:04d}-"
                 f"attempt-{run.attempt_number}"
@@ -299,11 +309,34 @@ class FrameworkRunner:
             result.rz_um,
             "ExecutionResult.rz_um",
         )
+        print_time_seconds = _finite_optional_number(
+            result.print_time_seconds,
+            "ExecutionResult.print_time_seconds",
+        )
+        try:
+            objective_value = evaluate_objective_expression(
+                self.config.objective,
+                ra_um=ra_um,
+                rz_um=rz_um,
+                print_time_seconds=print_time_seconds,
+            )
+        except ObjectiveExpressionError as error:
+            self.store.mark_manual_stop(
+                started.run_number,
+                error=f"Objective evaluation failed: {error}",
+                failed_stage="objective_evaluation",
+                cycle_id=result.cycle_id,
+            )
+            raise FrameworkRunnerError(
+                f"Run {started.run_number} produced measurements, but its "
+                f"objective could not be evaluated: {error}"
+            ) from error
         completed = self.store.mark_run_completed(
             started.run_number,
-            objective_value=ra_um,
+            objective_value=objective_value,
             ra_um=ra_um,
             rz_um=rz_um,
+            print_time_seconds=print_time_seconds,
             cycle_id=result.cycle_id,
         )
         self.export_results_csv()
@@ -387,6 +420,7 @@ class FrameworkRunner:
             "objective_value",
             "Ra_um",
             "Rz_um",
+            "print_time_seconds",
             "observation_kind",
             "is_penalty",
             "is_ignored",
@@ -422,6 +456,9 @@ class FrameworkRunner:
                             "objective_value": record.objective_value,
                             "Ra_um": record.ra_um,
                             "Rz_um": record.rz_um,
+                            "print_time_seconds": (
+                                record.print_time_seconds
+                            ),
                             "observation_kind": (
                                 "ignored_failure"
                                 if record.is_ignored

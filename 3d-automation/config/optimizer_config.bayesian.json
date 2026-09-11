@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
-  "experiment_name": "surface_roughness_flexible_example",
-  "total_runs": 12,
+  "experiment_name": "surface_roughness_bayesian_001",
+  "total_runs": 100,
   "seed": 42,
-  "objective": "Ra_um + 0.1 * print_time_minutes",
+  "objective": "Ra_um",
   "warm_start": {
     "method": "lhs",
     "sample_count": 10
@@ -24,35 +24,35 @@
     },
     {
       "name": "print_speed",
-      "lower": 40,
-      "upper": 150
+      "lower": 50,
+      "upper": 90
     },
     {
       "name": "extrusion_width",
-      "lower": 0.3,
-      "upper": 0.6
+      "lower": 0.38,
+      "upper": 0.5
     },
     {
       "name": "extrusion_multiplier",
-      "lower": 0.8,
-      "upper": 1.4
+      "lower": 1.05,
+      "upper": 1.2
     },
     {
       "name": "temperature",
-      "lower": 190,
-      "upper": 260
+      "lower": 215,
+      "upper": 235
     },
     {
       "name": "fan_speed",
-      "lower": 0,
-      "upper": 100
+      "lower": 30,
+      "upper": 80
     }
   ],
   "fixed_parameters": {},
   "paths": {
     "stl": "../data/models/15x15_V2_rounded.stl",
     "base_profile": "slicer_profile.ini",
-    "output_directory": "../data/optimization_runs/surface_roughness_flexible_example",
+    "output_directory": "../data/optimization_runs/surface_roughness_bayesian_001",
     "history_csvs": []
   }
 }

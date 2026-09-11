@@ -126,9 +126,11 @@ def parse_arguments(
     parser.add_argument(
         "--results-csv",
         type=Path,
-        default=(
-            PROJECT_DIR
-            / "data/results/parameter_optimization_cycles.csv"
+        required=True,
+        help=(
+            "Explicit result file for this run or series. Use a new file "
+            "name for a new series; an existing file is accepted only when "
+            "its CSV schema is compatible."
         ),
     )
     parser.add_argument(
@@ -176,13 +178,13 @@ def parse_arguments(
     parser.add_argument(
         "--top-solid-layers",
         type=int,
-        help="Top solid layers are currently fixed at 5.",
+        help="Top solid layers. Defaults to the base profile.",
     )
     parser.add_argument(
         "--print-speed",
         type=float,
         help=(
-            "Top solid infill speed in mm/s (50-90). "
+            "Top solid infill speed in mm/s. "
             "Defaults to the base profile."
         ),
     )
@@ -190,7 +192,7 @@ def parse_arguments(
         "--extrusion-width",
         type=float,
         help=(
-            "Top infill extrusion width in mm (0.38-0.50). "
+            "Top infill extrusion width in mm. "
             "Defaults to the base profile."
         ),
     )
@@ -198,7 +200,7 @@ def parse_arguments(
         "--extrusion-multiplier",
         type=float,
         help=(
-            "Extrusion multiplier (1.05-1.20). "
+            "Extrusion multiplier. "
             "Defaults to the base profile."
         ),
     )
@@ -206,7 +208,7 @@ def parse_arguments(
         "--temperature",
         type=int,
         help=(
-            "PLA print temperature in degrees Celsius (215-235). "
+            "Print temperature in degrees Celsius. "
             "Defaults to the base profile."
         ),
     )
@@ -214,7 +216,7 @@ def parse_arguments(
         "--fan-speed",
         type=int,
         help=(
-            "Fixed part-cooling fan speed in percent (30-80). "
+            "Fixed part-cooling fan speed in percent (0-100). "
             "Defaults to max_fan_speed from the base profile."
         ),
     )
@@ -244,7 +246,8 @@ def build_orchestrator(
     robot_ip = os.getenv("ROBOT_IP", "10.8.170.41")
     api_key = required_environment("PRUSALINK_API_KEY")
     qs_base_url = required_environment("QS_BASE_URL")
-    camera_base_url = os.getenv("CAMERA_BASE_URL", qs_base_url) #qs url ist default weil beide auf dem gleichen raspberry laufen
+    # The QS and camera APIs normally run on the same Raspberry Pi.
+    camera_base_url = os.getenv("CAMERA_BASE_URL", qs_base_url)
 
     slicer_path = Path(
         os.getenv(
@@ -280,6 +283,7 @@ def build_orchestrator(
         ),
     )
     cycle_recorder = CsvCycleRecorder(results_csv)
+    cycle_recorder.validate_destination()
 
     return PrintOrchestrator(
         slicer_service,
